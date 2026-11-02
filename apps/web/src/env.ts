@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 
 // The single source of runtime configuration (handoff rule 14).
-// Every variable is documented in /.env.example.
+// Every variable is documented in apps/web/.env.example.
 // TODO(E0-T4): add BETTER_AUTH_SECRET and BETTER_AUTH_URL.
 
 const serverSchema = z.object({
