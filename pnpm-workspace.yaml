@@ -1,3 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Dependencies allowed (true) or denied (false) to run install scripts.
+# sharp and unrs-resolver ship prebuilt binaries, so their scripts aren't needed.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
