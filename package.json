@@ -1,0 +1,22 @@
+{
+  "name": "gymos",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A smart lifting diary that makes progressive overload visible and actionable.",
+  "license": "MIT",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=26.13.0 <27",
+    "pnpm": ">=12.16.1 <13"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "2.11.10"
+  }
+}
