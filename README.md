@@ -8,6 +8,7 @@ Offline-first lifting analytics. Your data lives on your devices, syncs between 
 
 - [`docs/HANDOFF.md`](docs/HANDOFF.md): product spec, decisions and work plan
 - [`docs/platform-support.md`](docs/platform-support.md): supported platforms (Windows and macOS first) and acceptance criteria
+- [`docs/pwa-service-worker.md`](docs/pwa-service-worker.md): offline caching, update strategy and the headers a host must send
 - [`docs/adr/`](docs/adr/): architecture decision records
 - [`docs/research/`](docs/research/): spikes and method research
 
