@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "GymOs",
   description:
-    "A smart lifting diary that makes progressive overload visible and actionable.",
+    "Offline-first lifting analytics. Your data lives on your devices.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
