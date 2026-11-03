@@ -51,7 +51,7 @@ No COOP/COEP headers are needed: the `opfs-sahpool` VFS doesn't use `SharedArray
 
 ### Vercel
 
-Vercel already serves a static export's un-hashed files with `max-age=0, must-revalidate` and `_next/static` as immutable, and it sets the wasm MIME type. If T6 verification shows otherwise, add `apps/web/vercel.json`:
+Expected, **not yet verified** (that's E0-T6): Vercel serves a static export's un-hashed files with `max-age=0, must-revalidate`, serves `_next/static` as immutable, and sets the wasm MIME type, so no config file is needed. If the T6 check of the response headers shows otherwise, add `apps/web/vercel.json`:
 
 ```json
 {
