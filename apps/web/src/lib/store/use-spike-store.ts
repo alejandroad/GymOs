@@ -132,7 +132,9 @@ export function useSpikeStore() {
     return { runs, insertMedianMs: median(insert), selectMedianMs: median(select) };
   }, []);
 
-  return { state, addNote, benchmark };
+  const integrityCheck = useCallback(() => store().call("integrityCheck"), []);
+
+  return { state, addNote, benchmark, integrityCheck };
 }
 
 function median(values: number[]): number {
