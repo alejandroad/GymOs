@@ -1,4 +1,4 @@
-import type { LocalStoreApi } from "./protocol";
+import type { StoreApi } from "./protocol";
 import { RpcError, type RpcResult } from "./rpc";
 
 /** The local server didn't answer: it isn't running, or it stopped. */
@@ -7,10 +7,10 @@ export class ServerUnreachableError extends Error {
 }
 
 export interface StoreHttpClient {
-  call<M extends keyof LocalStoreApi & string>(
+  call<M extends keyof StoreApi & string>(
     method: M,
-    ...args: Parameters<LocalStoreApi[M]>
-  ): Promise<Awaited<ReturnType<LocalStoreApi[M]>>>;
+    ...args: Parameters<StoreApi[M]>
+  ): Promise<Awaited<ReturnType<StoreApi[M]>>>;
 }
 
 /**

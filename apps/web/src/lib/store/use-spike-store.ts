@@ -1,7 +1,7 @@
 "use client";
 
 import { newId } from "@gymos/schema";
-import { createHttpStore, type LocalStoreInfo, type SpikeNote } from "@gymos/store";
+import { createHttpStore, type StoreInfo, type SpikeNote } from "@gymos/store";
 import { useCallback, useEffect, useState } from "react";
 
 const LIST_LIMIT = 20;
@@ -17,7 +17,7 @@ async function timed<T>(run: () => Promise<T>): Promise<{ value: T; ms: number }
 }
 
 export interface SpikeState {
-  info: LocalStoreInfo | null;
+  info: StoreInfo | null;
   /** UI-measured: the first round trip to the server, from mount. */
   readyMs: number | null;
   notes: SpikeNote[];

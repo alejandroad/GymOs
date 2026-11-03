@@ -6,7 +6,7 @@ import { createDrizzle } from "../drizzle";
 import { runMigrations } from "../migrate";
 import { migrations } from "../migrations.generated";
 import { addNote, countNotes, listNotes } from "../notes";
-import type { LocalStoreApi, LocalStoreInfo } from "../protocol";
+import type { StoreApi, StoreInfo } from "../protocol";
 import { connectionFor } from "./connection";
 
 /** Another process (usually a second GymOs server) has the database open. */
@@ -22,8 +22,8 @@ export interface OpenStoreOptions {
 }
 
 export interface LocalStore {
-  api: LocalStoreApi;
-  info: LocalStoreInfo;
+  api: StoreApi;
+  info: StoreInfo;
   /** Closes the connection, which checkpoints the WAL and releases the lock. */
   close(): void;
 }
@@ -77,14 +77,14 @@ export function openStore({ dbPath, busyTimeoutMs = 2000 }: OpenStoreOptions): L
   }
 
   const db = createDrizzle(conn);
-  const info: LocalStoreInfo = {
+  const info: StoreInfo = {
     sqliteVersion: String(conn.query("SELECT sqlite_version()")[0]?.[0]),
     dbPath,
     schemaVersion: migrations.length,
     initMs: performance.now() - startedAt,
   };
 
-  const api: LocalStoreApi = {
+  const api: StoreApi = {
     info: async () => info,
     addNote: (note) => addNote(db, note),
     listNotes: (limit) => listNotes(db, limit),

@@ -13,7 +13,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@sqlite.org/sqlite-wasm": "3.54.1-build1",
     "drizzle-orm": "0.45.4"
   },
   "devDependencies": {

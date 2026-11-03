@@ -162,9 +162,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@sqlite.org/sqlite-wasm@3.54.1-build1': 434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84
-
 importers:
 
   .:
@@ -265,9 +262,6 @@ importers:
 
   packages/store:
     dependencies:
-      '@sqlite.org/sqlite-wasm':
-        specifier: 3.54.1-build1
-        version: 3.54.1-build1(patch_hash=434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84)
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4
@@ -1412,10 +1406,6 @@ packages:
     peerDependenciesMeta:
       browserslist:
         optional: true
-
-  '@sqlite.org/sqlite-wasm@3.54.1-build1':
-    resolution: {integrity: sha512-foW427VBLJ3G87bsnvQTZCc9zYe0Fq1wH0pz1I6BlKLKXcArIAyTkHtq0iT2llmhcMQt9T/p6l5PpQQh+6O8uQ==}
-    engines: {node: '>=22'}
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
@@ -4694,8 +4684,6 @@ snapshots:
   '@serwist/utils@9.5.13(browserslist@4.29.5)':
     optionalDependencies:
       browserslist: 4.29.5
-
-  '@sqlite.org/sqlite-wasm@3.54.1-build1(patch_hash=434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84)': {}
 
   '@swc/helpers@0.5.23':
     dependencies:
