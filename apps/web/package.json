@@ -7,7 +7,7 @@
     "build": "next build && serwist build serwist.config.mjs",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "next typegen && tsc --noEmit",
-    "preview": "serve out --listen 3000 --no-clipboard"
+    "preview": "serve out --listen 3000 --no-clipboard --config ../serve.json"
   },
   "dependencies": {
     "@gymos/schema": "workspace:*",
