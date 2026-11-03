@@ -1,9 +1,9 @@
-import { isWorkerEvent, type StoreApi, type StoreInfo, type WorkerEvent } from "./protocol";
+import { isWorkerEvent, type Role, type StoreApi, type WorkerEvent } from "./protocol";
 import { createRpcClient, RpcError, type RpcClient } from "./rpc";
 
 export interface StoreClient extends Pick<RpcClient<StoreApi>, "call"> {
-  /** Settles once the worker has opened the database (or failed to). */
-  ready: Promise<StoreInfo>;
+  /** Resolves with this tab's first known role, once the worker is running. */
+  started: Promise<{ role: Role; workerId: string }>;
   /** Subscribes to worker events. Returns an unsubscribe function. */
   onEvent(listener: (event: WorkerEvent) => void): () => void;
   /** Stops the worker and rejects pending calls. */
@@ -11,8 +11,9 @@ export interface StoreClient extends Pick<RpcClient<StoreApi>, "call"> {
 }
 
 /**
- * Starts the store worker and returns a typed client for it. The worker
- * owns the database; the UI never touches SQLite directly.
+ * Starts this tab's store worker and returns a typed client for it. The
+ * worker (or, in another tab, the leader it forwards to) owns the database;
+ * the UI never touches SQLite directly.
  */
 export function connectStore(): StoreClient {
   // `new Worker(new URL(..., import.meta.url))` is the form bundlers
@@ -24,12 +25,11 @@ export function connectStore(): StoreClient {
   const rpc = createRpcClient<StoreApi>(worker);
   const listeners = new Set<(event: WorkerEvent) => void>();
 
-  const ready = new Promise<StoreInfo>((resolve, reject) => {
+  const started = new Promise<{ role: Role; workerId: string }>((resolve, reject) => {
     worker.addEventListener("message", (event: MessageEvent) => {
       const message: unknown = event.data;
       if (!isWorkerEvent(message)) return;
-      if (message.type === "ready") resolve(message.info);
-      else if (message.type === "fatal") reject(new RpcError(message.error));
+      if (message.type === "role") resolve({ role: message.role, workerId: message.workerId });
       for (const listener of listeners) listener(message);
     });
     worker.addEventListener("error", (event) =>
@@ -38,7 +38,7 @@ export function connectStore(): StoreClient {
   });
 
   return {
-    ready,
+    started,
     call: rpc.call,
     onEvent(listener) {
       listeners.add(listener);

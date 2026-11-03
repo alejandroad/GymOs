@@ -1,3 +1,4 @@
+import { newId } from "@gymos/schema";
 import sqlite3InitModule, { type Database } from "@sqlite.org/sqlite-wasm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -5,7 +6,12 @@ import { createDrizzle, type StoreDb } from "./drizzle";
 import { runMigrations } from "./migrate";
 import { migrations } from "./migrations.generated";
 import { addNote, countNotes, listNotes } from "./notes";
+import type { SpikeNote } from "./schema";
 import { connectionFor } from "./sql";
+
+function note(body: string): SpikeNote {
+  return { id: newId(), body, createdAt: Date.now() };
+}
 
 let sqlite3: Awaited<ReturnType<typeof sqlite3InitModule>>;
 let raw: Database;
@@ -31,12 +37,19 @@ describe("spike notes through drizzle", () => {
   });
 
   it("stores notes with UUIDv7 IDs and lists them newest first", async () => {
-    const first = await addNote(db, "first");
-    const second = await addNote(db, "second");
+    await addNote(db, note("first"));
+    const second = await addNote(db, note("second"));
 
-    expect(first.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(await countNotes(db)).toBe(2);
     expect((await listNotes(db, 10)).map((n) => n.body)).toEqual(["second", "first"]);
     expect(await listNotes(db, 1)).toEqual([second]);
+  });
+
+  it("inserts a retried note only once", async () => {
+    const retried = note("sent twice");
+    await addNote(db, retried);
+    await addNote(db, retried);
+
+    expect(await countNotes(db)).toBe(1);
   });
 });
