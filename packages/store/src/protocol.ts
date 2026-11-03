@@ -27,6 +27,8 @@ export type StoreApi = {
   addNote(note: SpikeNote): Promise<SpikeNote>;
   listNotes(limit: number): Promise<SpikeNote[]>;
   countNotes(): Promise<number>;
+  /** Result of PRAGMA integrity_check: "ok" when the database is sound. */
+  integrityCheck(): Promise<string>;
 };
 
 /** Messages the worker sends to its tab outside of request/response. */
