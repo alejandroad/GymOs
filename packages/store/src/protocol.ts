@@ -56,6 +56,22 @@ export function isWorkerEvent(message: unknown): message is WorkerEvent {
   return typeof message === "object" && message !== null && "type" in message;
 }
 
+/** Facts about the on-disk database, reported by the local server. */
+export interface LocalStoreInfo {
+  sqliteVersion: string;
+  /** Absolute path of the database file. */
+  dbPath: string;
+  /** Number of migrations applied to the database, i.e. its schema version. */
+  schemaVersion: number;
+  /** Milliseconds from opening the file until it was locked and migrated. */
+  initMs: number;
+}
+
+/** The store's RPC surface as the local server serves it over HTTP. */
+export type LocalStoreApi = Omit<StoreApi, "info"> & {
+  info(): Promise<LocalStoreInfo>;
+};
+
 export interface SerializedError {
   name: string;
   message: string;

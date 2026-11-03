@@ -84,16 +84,27 @@ export function createRpcClient<A extends Api>(endpoint: Endpoint): RpcClient<A>
   };
 }
 
-/** Runs one request against `api` and builds its response. Never throws. */
-export async function handleRpcRequest(api: Api, request: RpcRequest): Promise<RpcResponse> {
-  const { id, method, args } = request;
+/** The outcome of one call, independent of transport. */
+export type RpcResult = { ok: true; result: unknown } | { ok: false; error: SerializedError };
+
+/**
+ * Runs `method` on `api`. Never throws. Only the API's own methods are
+ * callable: inherited names such as `constructor` or `toString` count as
+ * unknown.
+ */
+export async function handleRpcCall(api: Api, method: string, args: unknown[]): Promise<RpcResult> {
   try {
     const fn = Object.hasOwn(api, method) ? api[method] : undefined;
-    if (!fn) throw new Error(`Unknown method: ${method}`);
-    return { kind: "rpc-response", id, ok: true, result: await fn(...args) };
+    if (typeof fn !== "function") throw new Error(`Unknown method: ${method}`);
+    return { ok: true, result: await fn(...args) };
   } catch (error) {
-    return { kind: "rpc-response", id, ok: false, error: serializeError(error) };
+    return { ok: false, error: serializeError(error) };
   }
+}
+
+/** Runs one request against `api` and builds its response. Never throws. */
+export async function handleRpcRequest(api: Api, request: RpcRequest): Promise<RpcResponse> {
+  return { kind: "rpc-response", id: request.id, ...(await handleRpcCall(api, request.method, request.args)) };
 }
 
 /** Serves `api` on `endpoint`. Returns a function that stops serving. */
