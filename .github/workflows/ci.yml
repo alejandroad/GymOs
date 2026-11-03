@@ -63,3 +63,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Runs the built server: write, hard kill, restart, check the data and
+      # the integrity check, the single-instance lock and the Origin/Host checks.
+      - name: Smoke test the local server
+        run: node apps/server/scripts/smoke.mjs
