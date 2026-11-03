@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "preview": "serve out --listen 3000 --no-clipboard"
   },
   "dependencies": {
     "next": "16.4.3",
@@ -21,6 +21,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.3",
+    "serve": "14.2.6",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3"
   }
