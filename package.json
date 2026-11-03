@@ -12,7 +12,6 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "preview": "turbo run preview",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test"

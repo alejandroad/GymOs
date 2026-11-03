@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && serwist build serwist.config.mjs",
+    "build": "next build",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "next typegen && tsc --noEmit",
-    "preview": "serve out --listen 3000 --no-clipboard --config ../serve.json"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@gymos/schema": "workspace:*",
@@ -17,16 +16,12 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@serwist/cli": "9.5.13",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "esbuild": "0.28.2",
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.3",
-    "serve": "14.2.6",
-    "serwist": "9.5.13",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3"
   }
