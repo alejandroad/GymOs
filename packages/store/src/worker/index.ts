@@ -1,4 +1,5 @@
-import { serializeError, type WorkerEvent } from "../protocol";
+import { serializeError, type StoreApi, type StoreInfo, type WorkerEvent } from "../protocol";
+import { serveRpc } from "../rpc";
 import { openDatabase } from "./open";
 import { workerScope } from "./scope";
 
@@ -8,8 +9,19 @@ function emit(event: WorkerEvent): void {
   workerScope.postMessage(event);
 }
 
-openDatabase().then(
-  ({ vfs, sqliteVersion }) =>
-    emit({ type: "ready", info: { vfs, sqliteVersion, initMs: performance.now() - startedAt } }),
+const ready: Promise<StoreInfo> = openDatabase().then(({ vfs, sqliteVersion }) => ({
+  vfs,
+  sqliteVersion,
+  initMs: performance.now() - startedAt,
+}));
+
+const api: StoreApi = {
+  info: () => ready,
+};
+
+serveRpc(workerScope, api);
+
+ready.then(
+  (info) => emit({ type: "ready", info }),
   (error: unknown) => emit({ type: "fatal", error: serializeError(error) }),
 );
