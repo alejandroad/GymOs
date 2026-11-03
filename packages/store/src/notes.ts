@@ -1,13 +1,15 @@
-import { newId } from "@gymos/schema";
+// Spike-only queries over the demo table.
 import { count, desc } from "drizzle-orm";
 
 import type { StoreDb } from "./drizzle";
 import { spikeNote, type SpikeNote } from "./schema";
 
-/** Spike-only queries over the demo table. */
-export async function addNote(db: StoreDb, body: string): Promise<SpikeNote> {
-  const note: SpikeNote = { id: newId(), body, createdAt: Date.now() };
-  await db.insert(spikeNote).values(note);
+/**
+ * Idempotent: the caller generates the UUIDv7, so a request that is retried
+ * (for example, resent to a new leader tab) inserts the note only once.
+ */
+export async function addNote(db: StoreDb, note: SpikeNote): Promise<SpikeNote> {
+  await db.insert(spikeNote).values(note).onConflictDoNothing();
   return note;
 }
 

@@ -228,9 +228,6 @@ importers:
 
   packages/store:
     dependencies:
-      '@gymos/schema':
-        specifier: workspace:*
-        version: link:../schema
       '@sqlite.org/sqlite-wasm':
         specifier: 3.54.1-build1
         version: 3.54.1-build1(patch_hash=434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84)
@@ -238,6 +235,9 @@ importers:
         specifier: 0.45.4
         version: 0.45.4
     devDependencies:
+      '@gymos/schema':
+        specifier: workspace:*
+        version: link:../schema
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
