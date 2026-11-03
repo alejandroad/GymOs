@@ -1,201 +1,310 @@
-# GymOs: Prompt 0 (Epic E0, tickets T1–T6: stack spike)
+# GymOs: Prompt 0 v2 (Epic E0, tickets T1–T6: local-first stack spike)
 
-> Paste everything below the line into the coding agent, run from the root of the `GymOs` repo.
+> **v2 (2026-11-02) replaces v1.** v1's T3 (Neon) and T4 (Better Auth) are cancelled: accounts and the server move to the sync epic (E9). If v1's T1 or T2 already ran, keep that work and continue from the new T3. Paste everything below the line into Claude Code, run from the root of the `GymOs` repo.
 
 ---
 
-You are a senior full-stack engineer starting **GymOs**, a smart lifting diary and progressive-overload analytics app. It is a **public portfolio project** for FAANG-level applications, so code quality, commit hygiene and documentation are part of the deliverable.
+You are a senior full-stack engineer starting **GymOs**: a local-first, open-source lifting analytics platform. Data lives on the user's device, the app works fully offline with no account, and optional multi-device sync comes later. This is a public portfolio project for FAANG-level applications, so code quality, commit hygiene and documentation are part of the deliverable.
 
 ## 0. Read first
-1. Read `docs/HANDOFF.md` **completely** before writing any code. It is the source of truth for the product, the decisions (D1–D17), the data-model rules (especially **rule 13, offline readiness**, and **rule 14, portability**) and the work plan. If `docs/HANDOFF.md` is missing, stop and ask me for it.
-2. Run `git status`, `git remote -v` and `git log --oneline -5` to see the repo's state. The repo is expected to be nearly empty (a placeholder `README.md`). If a remote isn't configured, ask me before pushing.
-3. Check the toolchain: `node -v`, `pnpm -v`, `git --version`. I develop on **Windows**. Everything you add must work on Windows and on Linux CI.
+
+1. Read `docs/HANDOFF.md` (v1.5) completely before writing code. Pay particular attention to:
+   - §1.2, the principles, which are constraints;
+   - decisions D18 (local-first), D23 (local store), D6 (Next.js as a static PWA), D15 (hosting) and D19 (license);
+   - data-model rules 13 (local-first core) and 15 (portability);
+   - §5.2, the local-first facts;
+   - the E0 ticket table in §7.
+
+   If `docs/HANDOFF.md` is missing or isn't v1.5, stop and ask me for it.
+2. Run `git status`, `git remote -v`, `git log --oneline -10` and `git branch -a`. If work from Prompt 0 v1 exists, tell me what's there. Keep T1 and T2 if they're sound. Remove any Neon, Drizzle-on-Postgres, Better Auth or `/api/*` code from v1, each removal in its own commit with a clear message.
+3. Check the toolchain: `node -v`, `pnpm -v`, `git --version`. I develop on Windows. Everything must work on Windows and on Linux CI.
+4. Batch these questions to me up front:
+   - License: MIT (recommended) or Apache-2.0?
+   - Is a GitHub remote configured, and is `gh` authenticated?
+   - Can I link the Vercel project when you reach T6?
 
 ## 1. Goal of this session
-Complete **E0-T1 through E0-T6**: the stack spike. At the end there should be:
-- a monorepo with a Next.js 16 app;
-- a Neon database reached through Drizzle;
-- Better Auth email-and-password sign-up, sign-in and sign-out with a protected page;
-- a health route;
-- green GitHub Actions CI;
-- a production deploy on **Vercel Hobby**;
-- a written spike report and the first ADR.
 
-**This is foundation work only.** No product features, no schema beyond what auth and the health check need, no UI polish.
+Prove the riskiest part of the architecture: a durable SQL database in the browser that works offline, including on an iPhone. At the end there should be:
+
+- a pnpm + Turborepo monorepo with Next.js 16 as a statically exported, client-rendered PWA (`output: 'export'`, no server runtime);
+- `packages/schema` with a UUIDv7 `newId()`;
+- `packages/store`, which provides:
+  - SQLite-WASM in a dedicated Web Worker, persisted to OPFS;
+  - Drizzle as the query layer;
+  - a migration runner;
+  - a typed worker bridge;
+  - a single writer across tabs;
+- a service worker so the app loads and the database works in airplane mode;
+- green GitHub Actions CI;
+- a static production deploy on Vercel Hobby;
+- `docs/research/stack-spike.md` with measurements and an iOS go/no-go verdict;
+- `docs/adr/0001-local-first-architecture-hosting-portability.md`.
+
+This is foundation work only. No product schema, no product UI, no auth, no server.
 
 ## 2. Way of working (mandatory)
-- **One branch per ticket:** `e0/t1-repo-bootstrap`, `e0/t2-next-app`, `e0/t3-env-db`, `e0/t4-auth`, `e0/t5-ci`, `e0/t6-deploy-spike`. Open each as a PR into `main` and rebase-merge it so individual commits are kept. If no remote or `gh` CLI is available yet, work locally on the branches, merge with `--ff-only` or a rebase, and tell me.
-- **Small, modular commits** using **Conventional Commits** (`chore:`, `build:`, `feat:`, `docs:`, `ci:`, `test:`, `refactor:`). One logical change per commit. **Every commit must install, lint, typecheck and build.** The suggested commits below are guidance; split further if a commit does two things.
-- **Pin exact versions.** Before installing, check the current stable versions (Next.js 16.x, React 19.x, Tailwind 4.x, Drizzle, drizzle-kit, Better Auth, `@neondatabase/serverless`, Zod, Turborepo, pnpm, and the current Node **Active LTS**). Use exact versions (no `^`) in `package.json`, commit the lockfile, and record every version in the spike report.
-- **Follow the current official docs** for Next.js 16, Better Auth and Drizzle. Don't rely on memory, because APIs change. If the docs contradict this prompt, follow the docs and note it in the spike report.
-- **Never commit secrets.** Maintain a `.env.example`. Real values go in `.env.local` (gitignored) and in Vercel's environment settings.
-- **Cross-platform:** no bash-only `package.json` scripts. Use LF line endings enforced via `.gitattributes`.
-- **Portability (handoff rule 14):** no Vercel-specific SDKs or services in app code. All configuration goes through one Zod-validated `env` module. All database access goes through `packages/db`.
-- **Offline readiness (handoff rule 13):** IDs are **UUIDv7, generated by the application**, never database serials. If a library such as Better Auth owns its own tables and ID strategy, follow the library's way for those tables, note the exception in the ADR, and keep UUIDv7 for every GymOs-owned table.
-- **Stop and ask me** when you need: the Neon connection string, Vercel or GitHub access, a license choice, or anything that can't be undone. Batch your questions.
+
+- One branch per ticket: `e0/t1-repo-bootstrap`, `e0/t2-next-static-app`, `e0/t3-local-db`, `e0/t4-pwa-offline`, `e0/t5-ci`, `e0/t6-deploy-spike`. Open each as a PR into `main` and rebase-merge it so individual commits are kept. If no remote or `gh` is available, work locally on the branches, merge with `--ff-only`, and tell me.
+- Small, modular Conventional Commits (`chore:`, `build:`, `feat:`, `fix:`, `docs:`, `ci:`, `test:`, `refactor:`). One logical change per commit. Every commit must install, lint, typecheck, test and build. The suggested commits below are guidance; split further if a commit does two things.
+- Pin exact versions (no `^`) and commit the lockfile. Before installing, check the current stable versions of:
+  - Next.js 16.x, React 19.x, Tailwind 4.x, TypeScript;
+  - `@sqlite.org/sqlite-wasm`, Drizzle ORM and drizzle-kit;
+  - Serwist (or the PWA approach the Next 16 docs recommend);
+  - Zod, Vitest, Turborepo, pnpm, and the current Node Active LTS.
+
+  Record every version in the spike report.
+- Follow the current official docs for Next.js 16, SQLite WASM, Drizzle and Serwist. Don't rely on memory. If the docs contradict this prompt, follow the docs and note it in the report.
+- Local-first rules (handoff rule 13):
+  - IDs are UUIDv7, generated in the client. No database serials.
+  - The worker owns the database. The UI never touches SQLite directly.
+  - No network calls for data.
+- Portability (rule 15):
+  - `apps/web` must stay a pure static build: no route handlers, no Server Actions, no `@vercel/*` SDKs.
+  - Host config files (for example `vercel.json` for headers) are allowed, but every one must be documented with its equivalent for other hosts.
+- Principles: no telemetry, analytics or third-party scripts. Every dependency must be license-compatible with MIT. Record each dependency's license in the report.
+- Cross-platform: no bash-only `package.json` scripts. LF line endings enforced via `.gitattributes`.
+- Timebox: T3 gets about 1.5 days. If T3 or T4 overruns by more than 50%, stop and report with evidence and options.
+- Stop and ask me for: the license, GitHub or Vercel access, iPhone testing (you can't run an iPhone; give me a checklist), or anything irreversible. Batch your questions.
 
 ## 3. Tickets
 
 ### E0-T1 · Repo bootstrap
-**Scope:**
-- pnpm workspace (`pnpm-workspace.yaml` with `apps/*` and `packages/*`).
-- Turborepo (`turbo.json` with `dev`, `build`, `lint`, `typecheck` and `test` pipelines).
-- Root `package.json` with `packageManager` and `engines` set, and scripts that delegate to turbo.
-- `.nvmrc` (Node Active LTS), `.editorconfig`, `.gitattributes` (`* text=auto eol=lf`), `.gitignore` (Node, Next, Turbo, env files, OS files).
-- `LICENSE`: **ask me** (recommend MIT).
-- `README.md` stub: one-line pitch, status "pre-alpha", a link to `docs/`.
-- `docs/HANDOFF.md` (already provided), `docs/adr/0000-template.md` (MADR), plus `docs/research/` and `docs/prompts/` (store this prompt as `docs/prompts/PROMPT-0.md`).
 
-**Suggested commits:**
+Scope:
+
+- pnpm workspace (`apps/*`, `packages/*`).
+- `turbo.json` with `dev`, `build`, `lint`, `typecheck` and `test`.
+- Root `package.json` with `packageManager`, `engines` and delegating scripts.
+- `.nvmrc`, `.editorconfig`, `.gitattributes` (`* text=auto eol=lf`), `.gitignore` (Node, Next, Turbo, `out/`, env files, OS files).
+- `LICENSE` (my answer).
+- `README.md` stub: the pitch ("Offline-first lifting analytics. Your data lives on your devices, syncs between them if you want, and nobody paywalls your own history."), status "pre-alpha", and a link to `docs/`.
+- `docs/HANDOFF.md`, `docs/adr/0000-template.md` (MADR), `docs/research/`, and `docs/prompts/PROMPT-0.md` (this prompt).
+
+Suggested commits:
+
 1. `chore: initialize pnpm workspace and turborepo`
 2. `chore: add editor, git attributes and ignore rules`
 3. `docs: add handoff, adr template and docs structure`
 4. `chore: add license and readme stub`
 
-**Acceptance:** `pnpm install` succeeds. `pnpm turbo run build` runs (no tasks yet is fine). The tree matches the target layout in §4.
+Acceptance: `pnpm install` succeeds on Windows; `pnpm turbo run build` runs.
 
-### E0-T2 · Next.js 16 app
-**Scope:**
-- `apps/web` via the official `create-next-app` for Next.js 16: App Router, TypeScript, Tailwind 4, ESLint, `src/` directory, import alias `@/*`.
-- Root `tsconfig.base.json` (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` if the toolchain tolerates it) that `apps/web` extends.
-- A minimal landing page: "GymOs" and a one-line tagline. No design work.
-- Root scripts work: `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm typecheck` (`tsc --noEmit` per package).
+### E0-T2 · Next.js 16 static app
 
-**Suggested commits:**
+Scope:
+
+- `apps/web` via the official `create-next-app` for Next.js 16: App Router, TypeScript, Tailwind 4, ESLint, `src/`, alias `@/*`.
+- Set `output: 'export'`. Add a root `tsconfig.base.json` (`strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes` if the toolchain tolerates it) that every package extends.
+- A placeholder landing page ("GymOs" plus the tagline) marked as a client-rendered app shell. No design work.
+- A cross-platform `preview` script that serves `out/` with a pinned static server (for example `serve`). The service worker and OPFS behave differently under `next dev`, so all spike checks run against `build` + `preview`.
+
+Suggested commits:
+
 1. `feat(web): scaffold next.js 16 app`
-2. `build: add shared strict tsconfig base`
-3. `chore(web): wire lint and typecheck into turbo`
-4. `feat(web): add placeholder landing page`
+2. `build(web): enable static export`
+3. `build: add shared strict tsconfig base`
+4. `chore(web): wire lint, typecheck and preview into turbo`
+5. `feat(web): add placeholder landing page`
 
-**Acceptance:** all four root scripts pass, and the app runs locally.
+Acceptance: `pnpm dev`, `build`, `lint` and `typecheck` pass. `build` emits `apps/web/out/`, and `preview` serves it.
 
-### E0-T3 · Env module and database
-**Scope:**
-- `apps/web/src/env.ts`: Zod-validated server and client env vars (`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` …). Fail fast with readable errors. Allow `SKIP_ENV_VALIDATION=1` for CI builds.
-- `packages/db`:
-  - Drizzle with `@neondatabase/serverless` and the `neon-http` driver;
-  - exports a `db` client factory and the schema;
-  - `drizzle.config.ts`;
-  - scripts `db:generate`, `db:migrate`, `db:studio`;
-  - a `newId()` helper that returns a **UUIDv7**, with a unit test (Vitest) checking format and time order.
-- `GET /api/health` in `apps/web`: runs `select 1` through `packages/db` and returns `{ status: "ok", db: "ok", time }` (503 on failure). No secrets or connection details in the response.
-- `.env.example` documents every variable.
-- **Stop and ask me for the Neon `DATABASE_URL`** (pooled connection string) before testing against a live database.
+### E0-T3 · Local database spike (the main risk)
 
-**Suggested commits:**
-1. `feat(web): add zod-validated env module`
-2. `feat(db): add drizzle package with neon http driver`
-3. `feat(db): add uuidv7 id helper with tests`
-4. `feat(web): add health route with database check`
-5. `docs: document environment variables`
+Scope:
 
-**Acceptance:** `/api/health` returns ok locally against Neon, `db:generate` and `db:migrate` work, and the tests pass.
+- `packages/schema`
+  - `newId()` returns a UUIDv7 (a small, well-tested implementation or a pinned MIT library).
+  - Vitest tests for format, version and variant bits, and monotonic ordering within the same millisecond.
+- `packages/store` (framework-free; the React wiring lives in `apps/web`)
+  1. **Worker.** A dedicated module worker loads `@sqlite.org/sqlite-wasm` and opens the database on the `opfs-sahpool` VFS, which needs no COOP/COEP headers. If the docs now recommend otherwise, follow them and explain why. Confirm the `.wasm` asset is emitted and fetched correctly by the Next static build (bundler: Turbopack or webpack; record which one and any config needed).
+  2. **Query layer.** Drizzle on SQLite, using the proxy driver, or whichever driver the Drizzle docs recommend for SQLite WASM. It runs inside the worker (preferred) or proxies from the UI. Document the choice.
+  3. **Migrations.** drizzle-kit generates SQL. A small migration runner in the worker applies migrations at startup:
+     - in order, each in a transaction;
+     - recorded in a `__migrations` table;
+     - forward-only;
+     - with a unit test that runs the migrations twice and checks they're idempotent.
+  4. **Demo table.** `spike_note(id TEXT PRIMARY KEY /* UUIDv7 */, body TEXT NOT NULL, created_at INTEGER NOT NULL)`.
+  5. **Typed bridge.** A request/response RPC between UI and worker with typed messages, IDs and error propagation. Hand-rolled, or Comlink if you justify the dependency.
+  6. **Single writer.** Elect a leader across tabs with the Web Locks API. Only the leader opens the database (`opfs-sahpool` allows one opener). Other tabs proxy requests to the leader over `BroadcastChannel`. If proxying overruns the timebox, ship a clear "GymOs is open in another tab" state instead and document it as an E2 follow-up.
+  7. **Durability.** Call `navigator.storage.persist()`. Expose `persisted()` and `estimate()`.
+- `apps/web` demo page (`/spike`):
+  - add a note; list notes newest first;
+  - show the row count;
+  - show worker init time and the last query's latency;
+  - show the persistence state and storage estimate;
+  - show which tab is the leader.
 
-### E0-T4 · Authentication (Better Auth)
-**Scope:**
-- Better Auth configured server-side with the **Drizzle adapter** and **email and password** (email verification off for the spike; leave a `TODO(E2)`).
-- Generate the auth schema into `packages/db`, then migrate.
-- Auth route handler mounted per the Better Auth docs for the Next.js App Router.
-- Pages:
-  - `/sign-up` and `/sign-in`: plain, accessible forms with labels and error messages, using Better Auth's client;
-  - `/app`: a protected page showing "Signed in as {email}" and a sign-out button.
-- **Enforce protection server-side** (in the `/app` layout or page via the session API). Proxy/middleware redirects are optional sugar, never the only guard.
-- Secure cookie defaults. No rate limiting or captcha yet (`TODO(E2)`).
+Suggested commits:
 
-**Suggested commits:**
-1. `feat(auth): configure better auth with drizzle adapter`
-2. `feat(db): add auth schema and migration`
-3. `feat(web): mount auth route handler`
-4. `feat(web): add sign-up and sign-in pages`
-5. `feat(web): add protected app page with sign-out`
+1. `feat(schema): add uuidv7 id helper with tests`
+2. `feat(store): load sqlite wasm in a dedicated worker on opfs`
+3. `feat(store): add typed worker rpc bridge`
+4. `feat(store): add drizzle query layer and demo table`
+5. `feat(store): add forward-only migration runner with tests`
+6. `feat(store): elect a single writer across tabs with web locks`
+7. `feat(store): request persistent storage and expose estimates`
+8. `feat(web): add local database spike page`
 
-**Acceptance:** you can sign up, sign in, reload (the session persists), sign out, and visiting `/app` while signed out redirects to `/sign-in`. Check this manually, and document the steps in the PR.
+Acceptance (desktop, against `build` + `preview`):
+
+- Rows survive a reload and a full browser restart in Chrome, Firefox and Safari.
+- With two tabs open, both can add notes and nothing gets corrupted.
+- The tests pass.
+
+The iPhone checks happen in T6 because OPFS needs a secure context (HTTPS), and a plain LAN dev server doesn't provide one.
+
+### E0-T4 · PWA offline shell
+
+Scope:
+
+- A web app manifest (`app/manifest.ts` if static export supports it, otherwise a static file) with placeholder icons, including Apple touch icons and iOS meta tags.
+- A service worker that precaches the app shell, JS chunks, the worker script and the SQLite `.wasm`. Use Serwist if it supports Next 16 with `output: 'export'`. Otherwise run Serwist's build tooling (`injectManifest`) as a postbuild step over `out/`, or write a minimal hand-written service worker. Document which you chose and why.
+- Service-worker update strategy: a new version activates on the next load. No surprise reloads mid-session.
+- The service worker file must not be cached long-term. Document the cache headers it needs.
+
+Suggested commits:
+
+1. `feat(web): add web app manifest and icons`
+2. `feat(web): precache app shell, worker and wasm with a service worker`
+3. `docs: document service worker caching and update strategy`
+
+Acceptance (desktop, against `preview`):
+
+- With the network off in DevTools (after one online visit), the app loads, and `/spike` reads and writes.
+- Chrome offers an install, and the installed app works offline.
 
 ### E0-T5 · Continuous integration
-**Scope:**
+
+Scope:
+
 - `.github/workflows/ci.yml` running on pull requests and on pushes to `main`.
-- Steps: checkout, pnpm setup (version from `packageManager`), Node from `.nvmrc`, install with `--frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` (with `SKIP_ENV_VALIDATION=1`). Cache the pnpm store and Turbo.
+- Steps: checkout → pnpm (version from `packageManager`) → Node from `.nvmrc` → `pnpm install --frozen-lockfile` → `lint` → `typecheck` → `test` → `build`.
+- Cache the pnpm store and Turbo.
 - Add a CI badge to the README.
 
-**Suggested commits:**
+Suggested commits:
+
 1. `ci: add github actions workflow for lint, typecheck, test and build`
 2. `docs: add ci badge to readme`
 
-**Acceptance:** CI is green on the T5 PR.
+Acceptance: CI is green on the T5 PR.
 
-### E0-T6 · Deploy to Vercel and write up the spike
-**Scope:**
-1. **Ask me to:**
-   - create or link the Vercel project to the GitHub repo (root directory `apps/web`, or the monorepo settings Vercel recommends);
-   - set the env vars (`DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`) for Production and Preview.
+### E0-T6 · Static deploy, iOS verdict and write-up
 
-   Give me exact step-by-step instructions.
-2. Production smoke test: `/api/health` returns ok, and the full T4 auth flow works on the production URL.
-3. Measure and record:
-   - First Load JS per route (from `next build` output);
-   - `/api/health` cold vs warm latency (a few curl timings);
+1. Ask me to link Vercel. Give me exact steps: import the repo, root directory `apps/web`, the build and output settings for a static export, and any headers (`vercel.json` only if needed; document the equivalents for Netlify, Cloudflare Pages and nginx). No environment variables should be needed. If one is, stop and tell me why.
+2. Production smoke test (desktop):
+   - the T3 persistence checks;
+   - the T4 offline check;
+   - installability.
+3. Give me an iPhone checklist to run, and record my results:
+   - Safari tab: add notes → close the tab → reopen → rows still there?
+   - Safari, force-quit: force-quit Safari → reopen → rows still there?
+   - Safari, airplane mode: with airplane mode on, reload → the app loads, reads and writes?
+   - Home Screen PWA: add to Home Screen → open → add notes → force-quit → reopen → rows still there?
+   - PWA, airplane mode: open with airplane mode on → the app works?
+   - Storage: the `persisted()` result and the storage estimate in both modes.
+   - Separate stores: are the Safari and Home Screen stores separate? (Expected: yes. Note it.)
+   - Record the iOS version and the device model.
+4. Measure and record:
+   - First Load JS per route;
+   - the SQLite `.wasm` size (raw and compressed);
+   - worker init time (cold, and warm with a cached service worker);
+   - insert and select latency (median of 50 operations);
    - build time;
-   - the **current Vercel Hobby plan limits** that are relevant (function duration, invocations, bandwidth, build minutes, non-commercial clause), with a link to the source and the date checked.
-4. Write `docs/research/stack-spike.md`:
+   - the persistence result per browser;
+   - the current Vercel Hobby limits relevant to a static site and to Functions (for the future sync server), including the non-commercial clause, with the source link and the date checked.
+5. Write `docs/research/stack-spike.md`:
    - what was built;
-   - exact versions;
+   - exact versions and licenses;
    - measurements;
-   - problems and workarounds (Windows quirks, docs vs reality);
-   - risks;
-   - **"Implications for architecture"**;
-   - a recommendation (proceed, or what to change).
-5. Write `docs/adr/0001-framework-hosting-portability.md` (MADR) covering:
-   - Next.js 16 App Router;
-   - Vercel Hobby;
-   - the portability rules (rule 14) and the concrete migration path to Cloudflare, Netlify or a container;
-   - the UUIDv7 policy and any auth-library exception;
-   - the alternatives considered (TanStack Start, rejected by the owner; Cloudflare Workers via OpenNext, deferred).
+   - the browser matrix, including the iOS results;
+   - problems and workarounds (Windows quirks, docs vs reality, bundler issues);
+   - risks, especially iOS storage eviction and how M1 mitigates it (install prompt, `persist()`, archive backups);
+   - "Implications for architecture";
+   - a recommendation.
 
-**Suggested commits:**
-1. `chore(web): add vercel project configuration` (only if a config file is actually needed)
+   The recommendation must give an explicit verdict:
+   - **GO:** SQLite-WASM + OPFS works on iOS (at least as an installed PWA).
+   - **FALLBACK:** it doesn't. Build a minimal IndexedDB (Dexie) version of the demo table behind the same store interface, run the same checklist, and recommend.
+   - **REVISIT D6:** Next.js static export, the service worker or the WASM worker hit blocking problems. Include the evidence and the cost of switching to a Vite SPA.
+6. Write `docs/adr/0001-local-first-architecture-hosting-portability.md` (MADR), covering:
+   - Context: the local-first pitch, the principles, one user and a few devices.
+   - Decision:
+     - a client-rendered Next.js 16 static PWA;
+     - SQLite-WASM on `opfs-sahpool` in a worker;
+     - Drizzle;
+     - the forward-only migrations policy;
+     - client-generated UUIDv7 IDs;
+     - a single writer across tabs;
+     - static hosting on Vercel Hobby, portable to any static host;
+     - the future `apps/sync` (Hono, HTTP push/pull) as a separate deployable.
+   - Alternatives considered:
+     - hosted-first with Neon and auth (the v1.4 plan);
+     - IndexedDB/Dexie;
+     - wa-sqlite;
+     - PGlite;
+     - a third-party sync engine (Zero, Electric, PowerSync);
+     - a Vite SPA instead of Next.js;
+     - native shells (Tauri, Capacitor).
+   - Consequences: the iOS eviction risk; the archive becomes the M1 backup; no server in M1.
+
+Suggested commits:
+
+1. `chore(web): add host configuration for static deploy` (only if a file is actually needed)
 2. `docs(research): add stack spike report`
-3. `docs(adr): add 0001 framework, hosting and portability`
+3. `docs(adr): add 0001 local-first architecture, hosting and portability`
 
-**Acceptance:** the production URL passes the T4 checks, and the report and ADR are merged.
+Acceptance: the production URL passes the desktop checks, my iPhone results are recorded, the verdict is stated, and the report and ADR are merged.
 
 ## 4. Target layout after this session
+
 ```
 GymOs/
 ├─ apps/
-│  └─ web/                 # Next.js 16 (App Router, src/)
+│  └─ web/                    # Next.js 16, output: 'export', client-rendered PWA
+│     ├─ public/              # icons, (generated) service worker
 │     └─ src/
-│        ├─ app/           # routes: /, /sign-in, /sign-up, /app, /api/health, auth handler
-│        ├─ env.ts         # Zod-validated env
-│        └─ lib/auth*.ts   # Better Auth server and client setup
+│        ├─ app/              # /, /spike, manifest
+│        └─ lib/store/        # React hooks over packages/store
 ├─ packages/
-│  └─ db/                  # Drizzle schema, client, migrations, newId()
+│  ├─ schema/                 # newId() (UUIDv7) + tests
+│  └─ store/                  # sqlite-wasm worker, OPFS, drizzle, migrations, rpc, leader election
 ├─ docs/
 │  ├─ HANDOFF.md
-│  ├─ adr/0000-template.md, 0001-framework-hosting-portability.md
+│  ├─ adr/0000-template.md, 0001-local-first-architecture-hosting-portability.md
 │  ├─ research/stack-spike.md
 │  └─ prompts/PROMPT-0.md
 ├─ .github/workflows/ci.yml
 ├─ turbo.json  pnpm-workspace.yaml  tsconfig.base.json  package.json
-└─ .editorconfig .gitattributes .gitignore .nvmrc .env.example LICENSE README.md
+└─ .editorconfig .gitattributes .gitignore .nvmrc LICENSE README.md
 ```
-Small deviations are fine if the official tooling prefers them. Note them in the spike report.
+
+Small deviations are fine if the official tooling prefers them. Note them in the report.
 
 ## 5. Out of scope (don't do these)
-- Product schema (sessions, sets, exercises), the progression or PR engines, charts, shadcn/ui setup, styling beyond the defaults, R2 or object storage (E2), Playwright (E2), email verification, OAuth, rate limiting, analytics.
-- Any Vercel-only service, Garmin anything, TanStack.
 
-## 6. Definition of done for Prompt 0
+- Auth, accounts, Neon or Postgres, `apps/sync`, any API routes or server code, and any sync logic.
+- Product schema (sessions, sets, exercises), the progression and PR engines, charts, shadcn/ui, design work.
+- Playwright (E2), telemetry or analytics of any kind, Vercel-only services, anything Garmin, TanStack.
+
+## 6. Definition of done for Prompt 0 v2
+
 - [ ] T1–T6 merged to `main` as small Conventional Commits. CI is green.
-- [ ] The production deploy on Vercel works: health check plus the full auth flow.
+- [ ] The production static deploy works offline, and the data persists on desktop browsers.
+- [ ] The iPhone checklist results are recorded, with an explicit GO / FALLBACK / REVISIT D6 verdict.
 - [ ] `docs/research/stack-spike.md` and `docs/adr/0001-*.md` are merged.
-- [ ] No secrets in the repo. `.env.example` is complete.
+- [ ] All dependency licenses are recorded. No telemetry. No secrets.
 
 ## 7. Final report to me
+
 End the session with:
+
 1. a short summary;
 2. the production URL;
-3. the commit list (`git log --oneline`);
-4. measurements;
-5. deviations from this prompt and why;
-6. open risks;
-7. **a recommendation for Prompt 1** (E0-T7: progression rule spec), including any questions for me that it raises.
+3. `git log --oneline`;
+4. measurements and the browser matrix;
+5. the iOS verdict;
+6. deviations from this prompt and why;
+7. open risks;
+8. a recommendation for Prompt 1 (E0-T7: progression rule spec), including any questions for me that it raises.

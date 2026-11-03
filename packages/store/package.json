@@ -1,0 +1,25 @@
+{
+  "name": "@gymos/store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "db:generate": "node scripts/generate-migrations.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4"
+  },
+  "devDependencies": {
+    "@gymos/schema": "workspace:*",
+    "@types/node": "26.6.6",
+    "drizzle-kit": "0.31.11",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}
