@@ -10,12 +10,12 @@
     "pnpm": ">=12.16.1 <13"
   },
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "preview": "turbo run preview",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "start": "node scripts/start.mjs",
+    "dev": "node scripts/turbo.mjs run dev",
+    "build": "node scripts/turbo.mjs run build",
+    "lint": "node scripts/turbo.mjs run lint",
+    "typecheck": "node scripts/turbo.mjs run typecheck",
+    "test": "node scripts/turbo.mjs run test"
   },
   "devDependencies": {
     "turbo": "2.11.10"
