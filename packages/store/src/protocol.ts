@@ -1,7 +1,13 @@
+import type { SpikeNote } from "./schema";
+
+export type { SpikeNote };
+
 /** Facts about the opened database, reported once the worker is ready. */
 export interface StoreInfo {
   vfs: string;
   sqliteVersion: string;
+  /** Number of migrations applied to the database, i.e. its schema version. */
+  schemaVersion: number;
   /** Milliseconds from worker start until the database was open. */
   initMs: number;
 }
@@ -12,6 +18,9 @@ export interface StoreInfo {
  */
 export type StoreApi = {
   info(): Promise<StoreInfo>;
+  addNote(body: string): Promise<SpikeNote>;
+  listNotes(limit: number): Promise<SpikeNote[]>;
+  countNotes(): Promise<number>;
 };
 
 /** Messages the worker sends to its tab outside of request/response. */
