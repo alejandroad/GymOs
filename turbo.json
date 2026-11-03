@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
+  "globalPassThroughEnv": ["NEXT_TELEMETRY_DISABLED", "DO_NOT_TRACK", "NO_UPDATE_NOTIFIER"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
