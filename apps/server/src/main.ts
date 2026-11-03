@@ -9,10 +9,13 @@ import { fileURLToPath } from "node:url";
 import { MigrationError, openStore, StoreLockedError, type LocalStore } from "@gymos/store/node";
 
 import { ConfigError, loadConfig, type ServerConfig } from "./config";
+import { createDevProxy } from "./dev-proxy";
 import { createApp } from "./http";
 import { createStaticHandler } from "./static";
 
 const HOST = "127.0.0.1";
+/** When this module started running, for the startup time it reports. */
+const startedAt = performance.now();
 
 function fail(message: string): never {
   console.error(`\nGymOs couldn't start: ${message}\n`);
@@ -45,11 +48,15 @@ function open(config: ServerConfig): LocalStore {
 const webDir = fileURLToPath(new URL("../../web/out/", import.meta.url));
 
 const config = readConfig();
-if (!existsSync(join(webDir, "index.html"))) {
+if (!config.devProxy && !existsSync(join(webDir, "index.html"))) {
   fail(`the UI isn't built (${webDir} is missing). Run "pnpm start" from the repo root, which builds it first.`);
 }
 const store = open(config);
-const server = createServer(createApp({ api: store.api, fallback: createStaticHandler(webDir) }));
+const devProxy = config.devProxy ? createDevProxy(config.devProxy) : null;
+const server = createServer(
+  createApp({ api: store.api, fallback: devProxy ? devProxy.handle : createStaticHandler(webDir) }),
+);
+if (devProxy) server.on("upgrade", devProxy.upgrade);
 
 server.on("error", (error: NodeJS.ErrnoException) => {
   store.close();
@@ -66,7 +73,7 @@ server.listen(config.port, HOST, () => {
 GymOs is running at http://${HOST}:${port}${config.mode === "dev" ? " (dev)" : ""}
 Database: ${config.dbPath}
           SQLite ${sqliteVersion}, schema v${schemaVersion}, opened in ${initMs.toFixed(1)} ms
-Started in ${performance.now().toFixed(0)} ms. Press Ctrl+C to stop.
+Ready in ${(performance.now() - startedAt).toFixed(0)} ms. Press Ctrl+C to stop.
 `);
 });
 
