@@ -7,13 +7,17 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "db:generate": "node scripts/generate-migrations.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@sqlite.org/sqlite-wasm": "3.54.1-build1"
+    "@gymos/schema": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "3.54.1-build1",
+    "drizzle-orm": "0.45.4"
   },
   "devDependencies": {
+    "drizzle-kit": "0.31.11",
     "typescript": "5.9.3",
     "vitest": "5.0.5"
   }
