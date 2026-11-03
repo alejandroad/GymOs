@@ -10,7 +10,7 @@ import {
   type WorkerEvent,
 } from "../protocol";
 import { handleRpcRequest, isRpcRequest, type RpcRequest, type RpcResponse } from "../rpc";
-import { connectionFor } from "../sql";
+import { connectionFor, type SqlConnection } from "../sql";
 import { openDatabase } from "./open";
 import { workerScope } from "./scope";
 
@@ -33,7 +33,7 @@ const workerId = crypto.randomUUID();
 const bus = new BroadcastChannel(BUS_NAME);
 
 /** Set once this worker holds the writer lock. */
-let started: Promise<{ db: StoreDb; info: StoreInfo }> | null = null;
+let started: Promise<{ db: StoreDb; conn: SqlConnection; info: StoreInfo }> | null = null;
 /** This tab's requests waiting on another tab's leader, by request ID. */
 const forwarded = new Map<number, RpcRequest>();
 
@@ -45,18 +45,19 @@ function post(message: BusMessage): void {
   bus.postMessage(message);
 }
 
-async function open(): Promise<{ db: StoreDb; info: StoreInfo }> {
+async function open(): Promise<{ db: StoreDb; conn: SqlConnection; info: StoreInfo }> {
   const { db: raw, vfs, sqliteVersion } = await openDatabase();
   const conn = connectionFor(raw);
   runMigrations(conn, migrations);
   const initMs = performance.now() - startedAt;
   return {
     db: createDrizzle(conn),
+    conn,
     info: { vfs, sqliteVersion, schemaVersion: migrations.length, initMs, leaderId: workerId },
   };
 }
 
-function owned(): Promise<{ db: StoreDb; info: StoreInfo }> {
+function owned(): Promise<{ db: StoreDb; conn: SqlConnection; info: StoreInfo }> {
   if (!started) throw new Error("This tab doesn't own the database");
   return started;
 }
@@ -72,6 +73,11 @@ const api: StoreApi = {
   },
   listNotes: async (limit) => listNotes((await owned()).db, limit),
   countNotes: async () => countNotes((await owned()).db),
+  integrityCheck: async () =>
+    (await owned()).conn
+      .query("PRAGMA integrity_check")
+      .map(([line]) => String(line))
+      .join("; "),
 };
 
 function answer(response: RpcResponse): void {
