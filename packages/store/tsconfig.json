@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["es2024", "dom", "dom.iterable"],
-    "types": []
+    "types": ["node"]
   },
   "include": ["src", "drizzle.config.ts"]
 }

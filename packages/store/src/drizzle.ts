@@ -1,15 +1,13 @@
-import type { SqlValue } from "@sqlite.org/sqlite-wasm";
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 
 import * as schema from "./schema";
-import type { SqlConnection } from "./sql";
+import type { SqlConnection, SqlValue } from "./sql";
 
 /**
- * Drizzle over the worker's own SQLite connection, through the sqlite-proxy
+ * Drizzle over the store's own SQLite connection, through the sqlite-proxy
  * driver: Drizzle builds SQL and maps rows, and the callback runs it in
- * process. Drizzle has no SQLite-WASM driver; the proxy driver is its
- * documented route for custom SQLite connections. It runs inside the
- * worker, so queries never cross the UI boundary.
+ * process. Drizzle 0.45 has no `node:sqlite` driver; the proxy driver is its
+ * documented route for custom SQLite connections.
  */
 export function createDrizzle(conn: SqlConnection) {
   return drizzle(

@@ -1,28 +1,23 @@
 import { newId } from "@gymos/schema";
-import sqlite3InitModule, { type Database } from "@sqlite.org/sqlite-wasm";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createDrizzle, type StoreDb } from "./drizzle";
 import { runMigrations } from "./migrate";
 import { migrations } from "./migrations.generated";
+import { connectionFor } from "./node/connection";
 import { addNote, countNotes, listNotes } from "./notes";
 import type { SpikeNote } from "./schema";
-import { connectionFor } from "./sql";
 
 function note(body: string): SpikeNote {
   return { id: newId(), body, createdAt: Date.now() };
 }
 
-let sqlite3: Awaited<ReturnType<typeof sqlite3InitModule>>;
-let raw: Database;
+let raw: DatabaseSync;
 let db: StoreDb;
 
-beforeAll(async () => {
-  sqlite3 = await sqlite3InitModule();
-});
-
 beforeEach(() => {
-  raw = new sqlite3.oo1.DB(":memory:");
+  raw = new DatabaseSync(":memory:");
   const conn = connectionFor(raw);
   runMigrations(conn, migrations);
   db = createDrizzle(conn);

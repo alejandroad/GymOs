@@ -10,7 +10,8 @@ import {
   type WorkerEvent,
 } from "../protocol";
 import { handleRpcRequest, isRpcRequest, type RpcRequest, type RpcResponse } from "../rpc";
-import { connectionFor, type SqlConnection } from "../sql";
+import type { SqlConnection } from "../sql";
+import { connectionFor } from "./connection";
 import { openDatabase } from "./open";
 import { workerScope } from "./scope";
 

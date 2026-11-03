@@ -1,8 +1,9 @@
-import sqlite3InitModule, { type Database } from "@sqlite.org/sqlite-wasm";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DatabaseSync } from "node:sqlite";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { MigrationError, runMigrations, type Migration } from "./migrate";
-import { connectionFor, type SqlConnection } from "./sql";
+import { connectionFor } from "./node/connection";
+import type { SqlConnection } from "./sql";
 
 const m0: Migration = {
   tag: "0000_create_a",
@@ -11,16 +12,11 @@ const m0: Migration = {
 const m1: Migration = { tag: "0001_create_b", sql: "CREATE TABLE b (id TEXT PRIMARY KEY);" };
 const m2: Migration = { tag: "0002_add_b_note", sql: "ALTER TABLE b ADD COLUMN note TEXT;" };
 
-let sqlite3: Awaited<ReturnType<typeof sqlite3InitModule>>;
-let db: Database;
+let db: DatabaseSync;
 let conn: SqlConnection;
 
-beforeAll(async () => {
-  sqlite3 = await sqlite3InitModule();
-});
-
 beforeEach(() => {
-  db = new sqlite3.oo1.DB(":memory:");
+  db = new DatabaseSync(":memory:");
   conn = connectionFor(db);
 });
 
