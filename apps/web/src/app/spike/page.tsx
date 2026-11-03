@@ -9,9 +9,10 @@ const mb = (bytes: number | null) => (bytes === null ? "n/a" : `${(bytes / 1024 
 
 /** E0-T3 spike: proves SQLite-WASM on OPFS in a worker. Not product UI. */
 export default function SpikePage() {
-  const { state, addNote, benchmark } = useSpikeStore();
+  const { state, addNote, benchmark, integrityCheck } = useSpikeStore();
   const [body, setBody] = useState("");
   const [bench, setBench] = useState<string | null>(null);
+  const [integrity, setIntegrity] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -94,6 +95,13 @@ export default function SpikePage() {
           Benchmark 50 inserts and selects
         </button>{" "}
         <span data-testid="bench">{bench}</span>
+      </p>
+
+      <p className="text-sm">
+        <button type="button" onClick={async () => setIntegrity(await integrityCheck())} className="border px-3 py-1">
+          Run integrity check
+        </button>{" "}
+        <span data-testid="integrity">{integrity}</span>
       </p>
     </main>
   );
