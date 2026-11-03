@@ -5,9 +5,8 @@ import { useState, type FormEvent } from "react";
 import { useSpikeStore } from "@/lib/store/use-spike-store";
 
 const ms = (value: number | null) => (value === null ? "…" : `${value.toFixed(1)} ms`);
-const mb = (bytes: number | null) => (bytes === null ? "n/a" : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 
-/** E0-T3 spike: proves SQLite-WASM on OPFS in a worker. Not product UI. */
+/** E0 spike: proves the local server's on-disk SQLite database. Not product UI. */
 export default function SpikePage() {
   const { state, addNote, benchmark, integrityCheck } = useSpikeStore();
   const [body, setBody] = useState("");
@@ -26,11 +25,9 @@ export default function SpikePage() {
     setBench("running…");
     const result = await benchmark(50);
     setBench(
-      `median of ${result.runs}: insert ${result.insertMedianMs.toFixed(2)} ms, select ${result.selectMedianMs.toFixed(2)} ms`,
+      `median of ${result.runs} over HTTP: insert ${result.insertMedianMs.toFixed(2)} ms, select ${result.selectMedianMs.toFixed(2)} ms`,
     );
   }
-
-  const isLeader = state.info !== null && state.info.leaderId === state.workerId;
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4">
@@ -38,19 +35,20 @@ export default function SpikePage() {
 
       {state.error && (
         <p role="alert" className="border border-red-600 p-3">
-          Local storage is unavailable: {state.error}. GymOs needs OPFS, which some private or
-          restricted browsing modes turn off.
+          {state.error} Start it with <code>pnpm start</code> in the GymOs folder, then reload this page.
         </p>
       )}
 
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm" data-testid="status">
-        <dt>This tab</dt>
-        <dd data-testid="role">
-          {state.role === null ? "starting…" : isLeader ? "leader (owns the database)" : "follower (forwards to the leader)"}
-        </dd>
         <dt>Engine</dt>
-        <dd>{state.info ? `SQLite ${state.info.sqliteVersion} on ${state.info.vfs}, schema v${state.info.schemaVersion}` : "…"}</dd>
-        <dt>Worker init (leader)</dt>
+        <dd data-testid="engine">
+          {state.info ? `SQLite ${state.info.sqliteVersion} (node:sqlite), schema v${state.info.schemaVersion}` : "…"}
+        </dd>
+        <dt>Database file</dt>
+        <dd data-testid="db-path" className="break-all font-mono">
+          {state.info?.dbPath ?? "…"}
+        </dd>
+        <dt>Open and migrate (server)</dt>
         <dd data-testid="init-ms">{ms(state.info?.initMs ?? null)}</dd>
         <dt>First answer (this tab)</dt>
         <dd data-testid="ready-ms">{ms(state.readyMs)}</dd>
@@ -58,12 +56,6 @@ export default function SpikePage() {
         <dd data-testid="last-query-ms">{ms(state.lastQueryMs)}</dd>
         <dt>Rows</dt>
         <dd data-testid="count">{state.count ?? "…"}</dd>
-        <dt>Persisted</dt>
-        <dd data-testid="persisted">{state.storage ? String(state.storage.persisted) : "…"}</dd>
-        <dt>Storage</dt>
-        <dd data-testid="estimate">
-          {state.storage ? `${mb(state.storage.usage)} used of ${mb(state.storage.quota)}` : "…"}
-        </dd>
       </dl>
 
       <form onSubmit={submit} className="flex gap-2">

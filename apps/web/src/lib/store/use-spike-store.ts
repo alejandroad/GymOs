@@ -1,33 +1,15 @@
 "use client";
 
 import { newId } from "@gymos/schema";
-import {
-  connectStore,
-  requestPersistence,
-  storageState,
-  type Role,
-  type SpikeNote,
-  type StorageState,
-  type StoreClient,
-  type StoreInfo,
-} from "@gymos/store";
+import { createHttpStore, type LocalStoreInfo, type SpikeNote } from "@gymos/store";
 import { useCallback, useEffect, useState } from "react";
 
 const LIST_LIMIT = 20;
 
-/** One store worker per tab, created on first use in the browser. */
-let client: StoreClient | null = null;
-let connectedAt = 0;
+/** The local server that served this page also owns the database. */
+const store = createHttpStore();
 
-function store(): StoreClient {
-  if (!client) {
-    connectedAt = performance.now();
-    client = connectStore();
-  }
-  return client;
-}
-
-/** Times one round trip through the worker (and the leader tab, for followers). */
+/** Times one HTTP round trip to the local server. */
 async function timed<T>(run: () => Promise<T>): Promise<{ value: T; ms: number }> {
   const start = performance.now();
   const value = await run();
@@ -35,104 +17,83 @@ async function timed<T>(run: () => Promise<T>): Promise<{ value: T; ms: number }
 }
 
 export interface SpikeState {
-  role: Role | null;
-  workerId: string | null;
-  info: StoreInfo | null;
-  /** UI-measured: from creating the worker until the first answer from the database. */
+  info: LocalStoreInfo | null;
+  /** UI-measured: the first round trip to the server, from mount. */
   readyMs: number | null;
   notes: SpikeNote[];
   count: number | null;
   lastQueryMs: number | null;
-  storage: StorageState | null;
   error: string | null;
 }
 
 const initial: SpikeState = {
-  role: null,
-  workerId: null,
   info: null,
   readyMs: null,
   notes: [],
   count: null,
   lastQueryMs: null,
-  storage: null,
   error: null,
 };
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function useSpikeStore() {
   const [state, setState] = useState<SpikeState>(initial);
 
   const refresh = useCallback(async () => {
-    const s = store();
-    const [{ value: notes, ms }, count, storage] = await Promise.all([
-      timed(() => s.call("listNotes", LIST_LIMIT)),
-      s.call("countNotes"),
-      storageState(),
+    const [{ value: notes, ms }, count] = await Promise.all([
+      timed(() => store.call("listNotes", LIST_LIMIT)),
+      store.call("countNotes"),
     ]);
-    setState((prev) => ({ ...prev, notes, count, storage, lastQueryMs: ms }));
+    setState((prev) => ({ ...prev, notes, count, lastQueryMs: ms, error: null }));
   }, []);
 
   useEffect(() => {
-    const s = store();
     let active = true;
-    const fail = (error: unknown) => {
-      if (active) setState((prev) => ({ ...prev, error: error instanceof Error ? error.message : String(error) }));
-    };
+    const fail = (error: unknown) => active && setState((prev) => ({ ...prev, error: message(error) }));
 
-    const unsubscribe = s.onEvent((event) => {
-      if (!active) return;
-      if (event.type === "role") {
-        setState((prev) => ({ ...prev, role: event.role, workerId: event.workerId }));
-        // The leader may have changed: re-read which worker owns the database.
-        void s.call("info").then((info) => active && setState((prev) => ({ ...prev, info })), fail);
-      } else if (event.type === "changed") {
-        void refresh().catch(fail);
-      } else if (event.type === "fatal") {
-        fail(new Error(`${event.error.name}: ${event.error.message}`));
-      }
-    });
+    void timed(() => store.call("info"))
+      .then(({ value: info, ms }) => {
+        if (active) setState((prev) => ({ ...prev, info, readyMs: ms }));
+        return refresh();
+      })
+      .catch(fail);
 
-    void s.started.then(async ({ role, workerId }) => {
-      if (!active) return;
-      setState((prev) => ({ ...prev, role, workerId }));
-      const info = await s.call("info");
-      const readyMs = performance.now() - connectedAt;
-      if (active) setState((prev) => ({ ...prev, info, readyMs: prev.readyMs ?? readyMs }));
-      await requestPersistence();
-      await refresh();
-    }).catch(fail);
-
+    // Other tabs write through the same server; catch up when this tab is shown again.
+    const onShow = () => document.visibilityState === "visible" && void refresh().catch(fail);
+    window.addEventListener("focus", onShow);
+    document.addEventListener("visibilitychange", onShow);
     return () => {
       active = false;
-      unsubscribe();
+      window.removeEventListener("focus", onShow);
+      document.removeEventListener("visibilitychange", onShow);
     };
   }, [refresh]);
 
   const addNote = useCallback(
     async (body: string) => {
-      const { ms } = await timed(() =>
-        store().call("addNote", { id: newId(), body, createdAt: Date.now() }),
-      );
+      const { ms } = await timed(() => store.call("addNote", { id: newId(), body, createdAt: Date.now() }));
       setState((prev) => ({ ...prev, lastQueryMs: ms }));
+      await refresh();
     },
-    [],
+    [refresh],
   );
 
-  /** Median latency of `runs` inserts and `runs` selects, for the spike report. */
+  /** Median latency of `runs` inserts and `runs` selects, HTTP round trips included. */
   const benchmark = useCallback(async (runs = 50) => {
-    const s = store();
     const insert: number[] = [];
     const select: number[] = [];
     for (let i = 0; i < runs; i++) {
-      insert.push((await timed(() => s.call("addNote", { id: newId(), body: `bench ${i}`, createdAt: Date.now() }))).ms);
+      insert.push((await timed(() => store.call("addNote", { id: newId(), body: `bench ${i}`, createdAt: Date.now() }))).ms);
     }
     for (let i = 0; i < runs; i++) {
-      select.push((await timed(() => s.call("listNotes", LIST_LIMIT))).ms);
+      select.push((await timed(() => store.call("listNotes", LIST_LIMIT))).ms);
     }
+    await refresh();
     return { runs, insertMedianMs: median(insert), selectMedianMs: median(select) };
-  }, []);
+  }, [refresh]);
 
-  const integrityCheck = useCallback(() => store().call("integrityCheck"), []);
+  const integrityCheck = useCallback(() => store.call("integrityCheck"), []);
 
   return { state, addNote, benchmark, integrityCheck };
 }
