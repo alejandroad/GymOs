@@ -1,12 +1,16 @@
 // GymOs local server: owns the SQLite file and serves the UI on 127.0.0.1.
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
-import { homedir } from "node:os";
 import type { AddressInfo } from "node:net";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { MigrationError, openStore, StoreLockedError, type LocalStore } from "@gymos/store/node";
 
 import { ConfigError, loadConfig, type ServerConfig } from "./config";
 import { createApp } from "./http";
+import { createStaticHandler } from "./static";
 
 const HOST = "127.0.0.1";
 
@@ -37,9 +41,15 @@ function open(config: ServerConfig): LocalStore {
   }
 }
 
+/** The Next.js static export, next to this bundle at apps/server/dist/. */
+const webDir = fileURLToPath(new URL("../../web/out/", import.meta.url));
+
 const config = readConfig();
+if (!existsSync(join(webDir, "index.html"))) {
+  fail(`the UI isn't built (${webDir} is missing). Run "pnpm start" from the repo root, which builds it first.`);
+}
 const store = open(config);
-const server = createServer(createApp({ api: store.api }));
+const server = createServer(createApp({ api: store.api, fallback: createStaticHandler(webDir) }));
 
 server.on("error", (error: NodeJS.ErrnoException) => {
   store.close();
