@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@sqlite.org/sqlite-wasm@3.54.1-build1': 434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84
+
 importers:
 
   .:
@@ -227,7 +230,7 @@ importers:
     dependencies:
       '@sqlite.org/sqlite-wasm':
         specifier: 3.54.1-build1
-        version: 3.54.1-build1
+        version: 3.54.1-build1(patch_hash=434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84)
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -3198,7 +3201,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@sqlite.org/sqlite-wasm@3.54.1-build1': {}
+  '@sqlite.org/sqlite-wasm@3.54.1-build1(patch_hash=434e236af3edb870812f65055713e4617b9173db5666f2db7fff13863f486b84)': {}
 
   '@swc/helpers@0.5.23':
     dependencies:

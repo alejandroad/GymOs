@@ -7,3 +7,6 @@ packages:
 allowBuilds:
   sharp: false
   unrs-resolver: false
+
+patchedDependencies:
+  '@sqlite.org/sqlite-wasm@3.54.1-build1': patches/@sqlite.org__sqlite-wasm@3.54.1-build1.patch
