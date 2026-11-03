@@ -1,5 +1,7 @@
 # GymOs
 
+[![CI](https://github.com/alejandroad/GymOs/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/alejandroad/GymOs/actions/workflows/ci.yml?query=branch%3Adev)
+
 Offline-first lifting analytics. Your data lives on your devices, syncs between them if you want, and nobody paywalls your own history.
 
 **Status:** pre-alpha. Nothing is deployed yet.
@@ -16,7 +18,7 @@ Offline-first lifting analytics. Your data lives on your devices, syncs between 
 
 Requires Node 26 (see `.nvmrc`) and pnpm 12.
 
-Works on Windows, macOS and Linux.
+Works on Windows, macOS and Linux; CI checks all three on every pull request.
 
 ```bash
 pnpm install
