@@ -1,34 +1,20 @@
-# Dependencies
+# Rust
+/target/
+**/target/
+
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# UI (Vite)
 node_modules/
-.pnpm-store/
-
-# Build output
-.next/
-out/
-dist/
-build/
-*.tsbuildinfo
-next-env.d.ts
-
-# Turborepo
-.turbo/
-
-# Test output
-coverage/
+apps/desktop/dist/
 
 # Env files (keep the example)
 .env
 .env*.local
 .env.*
 !.env.example
-
-# Logs
-npm-debug.log*
-pnpm-debug.log*
-*.log
-
-# Vercel
-.vercel/
 
 # OS and editor files
 .DS_Store
