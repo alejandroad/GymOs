@@ -1,5 +1,7 @@
 # GymOs: Handoff for the Next Agent
 
+> **Note (2026-11-03):** the product sections below (§1–3) still stand. The stack, hosting, and data-model rules 13 and 15 in §4–6, and the work plan in §7, are superseded by `docs/design.md` (the Rust + Tauri 2 + React pivot).
+
 **Version:** 1.5 · **Date:** 2026-11-02 · **Supersedes:** v1.0–v1.4 · **To:** the architecture and implementation agent
 **Owner:** Alejandro, solo developer. He is a professional TypeScript engineer and builds web trading charts at his day job.
 **Repo:** `GymOs` (local: `C:\Users\Admin\Desktop\GymOs\GymOs`). The repo is **public and open source**. It is currently empty apart from a placeholder `README.md` and `.git`.
