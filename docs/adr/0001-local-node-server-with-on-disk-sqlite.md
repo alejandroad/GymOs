@@ -1,8 +1,10 @@
 ---
-status: "accepted"
+status: "Superseded by docs/design.md (2026-11-03)"
 date: 2026-11-02
 decision-makers: "Alejandro (owner)"
 ---
+
+> **Superseded (2026-11-03):** the stack pivoted from TypeScript/Node to Rust + Tauri 2 + React; see `docs/design.md` (DD-01 through DD-12), which replaces this ADR's Node-server runtime, `node:sqlite` storage and transport decisions. The durability problem this ADR solved — a database the user owns and can back up — carries over, now solved with `rusqlite` on disk inside the Tauri shell instead of a local HTTP server.
 
 # Run GymOs as a local Node server that owns an on-disk SQLite file
 
