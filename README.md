@@ -11,14 +11,15 @@ nobody paywalls your own history.
 - **Shell:** Tauri 2 — desktop first (Windows and macOS), phone later
 - **UI:** React + TypeScript + Vite, with types generated from Rust
 
-See [`docs/design.md`](docs/design.md) for the full set of design
-decisions.
+See [`docs/product.md`](docs/product.md) for what GymOs does and
+[`docs/design.md`](docs/design.md) for how it is built.
 
 The previous TypeScript/Node local-first spike is preserved at the
 [`archive/ts-node-spike`](https://github.com/alejandroad/GymOs/tree/archive/ts-node-spike) tag.
 
 ## Docs
 
+- [`docs/product.md`](docs/product.md): product spec: principles, core loop and engine rules.
 - [`docs/design.md`](docs/design.md): design decisions for the Rust + Tauri stack.
 - [`docs/adr/`](docs/adr/): architecture decision records.
 

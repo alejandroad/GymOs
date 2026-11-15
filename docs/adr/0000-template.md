@@ -10,7 +10,7 @@ decision-makers: "{list everyone involved in the decision}"
 
 ## Context and Problem Statement
 
-{Describe the context and problem statement in two or three sentences or as a short story. Articulate the problem as a question and link to the relevant handoff sections or research docs.}
+{Describe the context and problem statement in two or three sentences or as a short story. Articulate the problem as a question and link to the relevant product spec sections (`docs/product.md`).}
 
 ## Decision Drivers
 

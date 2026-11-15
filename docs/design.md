@@ -2,7 +2,7 @@
 
 **Status:** Accepted · **Date:** 2026-11-03 · **Owner:** Alejandro
 **Supersedes:** the stack, platform and workflow parts of `docs/HANDOFF.md` v1.5 (D6, D11, D15, D23, rules 13 and 15, the E0 tickets) and ADR 0001 (local Node server with `node:sqlite`).
-**Unchanged:** the product. The principles (§1.2), the core loop (§1.3) and the product spec (§3) in `docs/HANDOFF.md` still define what GymOs does. This document defines how it is built.
+**Unchanged:** the product. The principles (§1.2), the core loop (§1.3) and the product spec (§3), now in [`docs/product.md`](product.md), still define what GymOs does. This document defines how it is built.
 
 > Each section below becomes its own ADR in `docs/adr/`. This file is the single summary; the ADRs carry the alternatives and consequences in full.
 
@@ -180,7 +180,7 @@
 ### DD-12 · Repository reset
 - Tag the current TypeScript/Node spike as `archive/ts-node-spike` and push the tag.
 - Remove the old code in small commits on `main`, **keeping history**. A visible, documented pivot is a portfolio signal.
-- ADR 0001 stays, marked **Superseded**. `docs/HANDOFF.md` keeps the product definition and gets a note pointing here for the stack.
+- ADR 0001 was marked **Superseded**, then removed along with `docs/HANDOFF.md` in `368e165`. Both remain in git history. The product definition (handoff §1 and §3) now lives in [`docs/product.md`](product.md).
 - Retire `dev`.
 
 ---
@@ -204,10 +204,8 @@ GymOs/
 │     └─ vite.config.ts
 ├─ docs/
 │  ├─ design.md               # this file
-│  ├─ HANDOFF.md              # product definition (stack sections superseded)
-│  ├─ workflow.md
-│  ├─ adr/
-│  └─ research/
+│  ├─ product.md              # product definition (what GymOs does)
+│  └─ adr/
 ├─ .github/workflows/
 ├─ LICENSE  README.md  .editorconfig  .gitattributes  .gitignore
 ```
