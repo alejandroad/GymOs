@@ -12,7 +12,7 @@ nobody paywalls your own history.
 - **UI:** React + TypeScript + Vite, with types generated from Rust
 
 See [`docs/design.md`](docs/design.md) for the full set of design
-decisions, and [`docs/HANDOFF.md`](docs/HANDOFF.md) for the product spec.
+decisions.
 
 The previous TypeScript/Node local-first spike is preserved at the
 [`archive/ts-node-spike`](https://github.com/alejandroad/GymOs/tree/archive/ts-node-spike) tag.
@@ -20,10 +20,7 @@ The previous TypeScript/Node local-first spike is preserved at the
 ## Docs
 
 - [`docs/design.md`](docs/design.md): design decisions for the Rust + Tauri stack.
-- [`docs/HANDOFF.md`](docs/HANDOFF.md): product spec. Its stack and work-plan sections are superseded by `docs/design.md`.
-- [`docs/workflow.md`](docs/workflow.md): trunk-based workflow and commit rules.
 - [`docs/adr/`](docs/adr/): architecture decision records.
-- [`docs/research/`](docs/research/): spikes and method research.
 
 ## License
 
