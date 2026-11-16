@@ -30,6 +30,9 @@
  * Record        derived: Subject (open) × RecordKind (closed) → Quantity
  * ```
  *
+ * The overload rules live in [`progression`], a public module because they
+ * form one API of their own: schemes, e1RM, pairing, signals and verdicts.
+ *
  * The stats and medals page is not a type here. It is a view the engine
  * builds from the profile, the latest measurements and the records.
  */
@@ -42,6 +45,7 @@ mod ids;
 mod measurement;
 mod metric;
 mod profile;
+pub mod progression;
 mod provenance;
 mod records;
 mod session;

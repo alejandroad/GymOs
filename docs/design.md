@@ -229,7 +229,11 @@
 - **A single rep is the 1RM.** Epley gives 1.033 × w at one rep, so a true single would beat itself. For `r = 1`, e1RM is `w`.
 - **Exact comparisons.** Epley is a ratio, so "did e1RM go up" is decided by cross-multiplying integer `Mass` values in `i128`: `w₁·k(r₁)` vs `w₂·k(r₂)`, where `k(r) = 30 + r`, and `k(1) = 30` for the single-rep rule. RPE adjustment uses half-reps to stay integral (`2·r_eff = 2r + 20 − rpe_half_points`). Floats are used only to display values such as "124.0 → 126.7 kg".
 - **e1RM above 12 reps is skipped.** The formulas lose accuracy past about 10–12 reps. The skip is recorded so the explanation stays honest, and reps and volume still apply.
-- **Cross-unit "same load".** 100 kg and 220.46 lb differ by about 1 g. For **pairing only**, loads within 0.5% count as the same load. This is a versioned threshold. Every other comparison stays exact.
+- **Cross-unit "same load".** 100 kg and 220.46 lb differ by about 1 g. With exact comparison, a unit switch would read as a false `E1rm` drop and a `Regressed` verdict. A blanket tolerance would also be wrong: micro-plates (+0.25 kg on 100 kg = 0.25%) are real progress.
+  - Loads entered in the **same unit** compare exactly.
+  - Loads entered in **different units** count as equal within 0.5%, checked in integers: `|a − b| × 200 ≤ max(a, b)`.
+  - The same rule applies to e1RM and volume deltas when the two sides' best sets (for e1RM) or any counted sets (for volume) were entered in different units.
+  - The threshold is versioned with `ALGORITHM_VERSION`, and it lives in one place (`progression/compare.rs`).
 
 **Placement** (follows DD-03):
 - Pure rules in `gymos-domain/src/progression/` (`e1rm.rs`, `signals.rs`, `verdict.rs`) plus `ALGORITHM_VERSION`.
