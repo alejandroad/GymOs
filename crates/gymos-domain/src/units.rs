@@ -1,52 +1,52 @@
-//! Physical quantities: mass, load, reps, duration and distance.
-//!
-//! All quantities are integers, never floats, so records compare exactly and
-//! nothing drifts when values round-trip through storage (product D10).
-//!
-//! Mass is stored in **nanograms** because both units convert to it exactly:
-//! 0.01 kg is 10,000,000,000 ng and 0.01 lb is 4,535,923,700 ng (the pound is
-//! defined as exactly 0.453 592 37 kg). So 225 lb and 102.06 kg are both
-//! stored without rounding, and a PR tie is a true tie.
+/*!
+ * Physical quantities: mass, load, reps, duration and distance.
+ *
+ * All quantities are integers, never floats, so records compare exactly and
+ * nothing drifts when values round-trip through storage (product D10).
+ *
+ * Mass is stored in **nanograms** because both units convert to it exactly:
+ * 0.01 kg is 10,000,000,000 ng and 0.01 lb is 4,535,923,700 ng (the pound is
+ * defined as exactly 0.453 592 37 kg). So 225 lb and 102.06 kg are both
+ * stored without rounding, and a PR tie is a true tie.
+ */
 
 use thiserror::Error;
 
-/// Why a quantity was rejected.
+/** Why a quantity was rejected. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum UnitError {
-    /// Reps outside [`Reps::MIN`]..=[`Reps::MAX`].
+    /** Reps outside [`Reps::MIN`]..=[`Reps::MAX`]. */
     #[error("reps must be between 1 and 1000, got {0}")]
     RepsOutOfRange(u16),
-    /// A load heavier than [`Load::MAX`].
+    /** A load heavier than [`Load::MAX`]. */
     #[error("load must not exceed 1000 kg")]
     LoadTooHeavy,
-    /// A duration outside [`DurationSecs::MIN`]..=[`DurationSecs::MAX`].
+    /** A duration outside [`DurationSecs::MIN`]..=[`DurationSecs::MAX`]. */
     #[error("duration must be between 1 second and 24 hours, got {0} s")]
     DurationOutOfRange(u32),
-    /// A distance outside [`Distance::MIN_MM`]..=[`Distance::MAX_MM`].
+    /** A distance outside [`Distance::MIN_MM`]..=[`Distance::MAX_MM`]. */
     #[error("distance must be between 1 mm and 1000 km, got {0} mm")]
     DistanceOutOfRange(u32),
 }
 
 const NANOGRAMS_PER_KILOGRAM: i64 = 1_000_000_000_000;
 
-// ---------------------------------------------------------------------------
-// Mass
-// ---------------------------------------------------------------------------
+/* Mass */
 
-/// A mass in whole nanograms: the unit-independent value used to compare loads.
+/** A mass in whole nanograms: the unit-independent value used to compare loads. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Mass(i64);
 
 impl Mass {
-    /// No mass at all.
+    /** No mass at all. */
     pub const ZERO: Self = Self(0);
 
-    /// The exact value in nanograms.
+    /** The exact value in nanograms. */
     pub const fn nanograms(self) -> i64 {
         self.0
     }
 
-    /// The value in kilograms, for display and for formulas such as e1RM.
+    /** The value in kilograms, for display and for formulas such as e1RM. */
     pub fn kilograms(self) -> f64 {
         #[expect(
             clippy::cast_precision_loss,
@@ -57,16 +57,14 @@ impl Mass {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Load
-// ---------------------------------------------------------------------------
+/* Load */
 
-/// The unit a load was entered in.
+/** The unit a load was entered in. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WeightUnit {
-    /// Kilograms.
+    /** Kilograms. */
     Kilograms,
-    /// Pounds (international avoirdupois pound).
+    /** Pounds (international avoirdupois pound). */
     Pounds,
 }
 
@@ -79,11 +77,13 @@ impl WeightUnit {
     }
 }
 
-/// A load exactly as the user entered it: a value with two decimal places,
-/// plus its unit.
-///
-/// Equality means "entered the same way": 100 kg and 220.46 lb are not
-/// equal. To ask which is heavier, compare [`Load::mass`].
+/**
+ * A load exactly as the user entered it: a value with two decimal places,
+ * plus its unit.
+ *
+ * Equality means "entered the same way": 100 kg and 220.46 lb are not
+ * equal. To ask which is heavier, compare [`Load::mass`].
+ */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Load {
     hundredths: u32,
@@ -91,16 +91,20 @@ pub struct Load {
 }
 
 impl Load {
-    /// The heaviest load accepted: 1000 kg, well past any human lift, so a
-    /// typo such as 10000 is caught at entry.
+    /**
+     * The heaviest load accepted: 1000 kg, well past any human lift, so a
+     * typo such as 10000 is caught at entry.
+     */
     pub const MAX: Mass = Mass(1_000 * NANOGRAMS_PER_KILOGRAM);
 
-    /// Builds a load from hundredths of a unit: `Load::new(10_250, Kilograms)`
-    /// is 102.50 kg.
-    ///
-    /// # Errors
-    ///
-    /// [`UnitError::LoadTooHeavy`] above [`Load::MAX`].
+    /**
+     * Builds a load from hundredths of a unit: `Load::new(10_250, Kilograms)`
+     * is 102.50 kg.
+     *
+     * # Errors
+     *
+     * [`UnitError::LoadTooHeavy`] above [`Load::MAX`].
+     */
     pub fn new(hundredths: u32, unit: WeightUnit) -> Result<Self, UnitError> {
         let nanograms = i64::from(hundredths)
             .checked_mul(unit.nanograms_per_hundredth())
@@ -111,42 +115,42 @@ impl Load {
         Ok(Self { hundredths, unit })
     }
 
-    /// The entered value in hundredths of [`Load::unit`].
+    /** The entered value in hundredths of [`Load::unit`]. */
     pub const fn hundredths(self) -> u32 {
         self.hundredths
     }
 
-    /// The unit the value was entered in.
+    /** The unit the value was entered in. */
     pub const fn unit(self) -> WeightUnit {
         self.unit
     }
 
-    /// The exact mass, independent of the entry unit.
+    /** The exact mass, independent of the entry unit. */
     pub fn mass(self) -> Mass {
         // Cannot overflow: `new` guarantees the product is at most `MAX`.
         Mass(i64::from(self.hundredths) * self.unit.nanograms_per_hundredth())
     }
 }
 
-// ---------------------------------------------------------------------------
-// Reps, duration, distance
-// ---------------------------------------------------------------------------
+/* Reps, duration, distance */
 
-/// The number of repetitions in a set.
+/** The number of repetitions in a set. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Reps(u16);
 
 impl Reps {
-    /// The fewest reps a logged set can have.
+    /** The fewest reps a logged set can have. */
     pub const MIN: u16 = 1;
-    /// The most reps a logged set can have.
+    /** The most reps a logged set can have. */
     pub const MAX: u16 = 1_000;
 
-    /// Builds a rep count.
-    ///
-    /// # Errors
-    ///
-    /// [`UnitError::RepsOutOfRange`] outside [`Reps::MIN`]..=[`Reps::MAX`].
+    /**
+     * Builds a rep count.
+     *
+     * # Errors
+     *
+     * [`UnitError::RepsOutOfRange`] outside [`Reps::MIN`]..=[`Reps::MAX`].
+     */
     pub const fn new(reps: u16) -> Result<Self, UnitError> {
         if reps < Self::MIN || reps > Self::MAX {
             return Err(UnitError::RepsOutOfRange(reps));
@@ -154,28 +158,30 @@ impl Reps {
         Ok(Self(reps))
     }
 
-    /// The rep count.
+    /** The rep count. */
     pub const fn get(self) -> u16 {
         self.0
     }
 }
 
-/// A duration in whole seconds (a plank hold, a timed set).
+/** A duration in whole seconds (a plank hold, a timed set). */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DurationSecs(u32);
 
 impl DurationSecs {
-    /// The shortest duration accepted.
+    /** The shortest duration accepted. */
     pub const MIN: u32 = 1;
-    /// The longest duration accepted: 24 hours.
+    /** The longest duration accepted: 24 hours. */
     pub const MAX: u32 = 24 * 60 * 60;
 
-    /// Builds a duration.
-    ///
-    /// # Errors
-    ///
-    /// [`UnitError::DurationOutOfRange`] outside
-    /// [`DurationSecs::MIN`]..=[`DurationSecs::MAX`].
+    /**
+     * Builds a duration.
+     *
+     * # Errors
+     *
+     * [`UnitError::DurationOutOfRange`] outside
+     * [`DurationSecs::MIN`]..=[`DurationSecs::MAX`].
+     */
     pub const fn new(seconds: u32) -> Result<Self, UnitError> {
         if seconds < Self::MIN || seconds > Self::MAX {
             return Err(UnitError::DurationOutOfRange(seconds));
@@ -183,28 +189,30 @@ impl DurationSecs {
         Ok(Self(seconds))
     }
 
-    /// The duration in seconds.
+    /** The duration in seconds. */
     pub const fn get(self) -> u32 {
         self.0
     }
 }
 
-/// A distance in whole millimetres (a farmer's carry, a sled push).
+/** A distance in whole millimetres (a farmer's carry, a sled push). */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Distance(u32);
 
 impl Distance {
-    /// The shortest distance accepted.
+    /** The shortest distance accepted. */
     pub const MIN_MM: u32 = 1;
-    /// The longest distance accepted: 1000 km.
+    /** The longest distance accepted: 1000 km. */
     pub const MAX_MM: u32 = 1_000_000_000;
 
-    /// Builds a distance from millimetres.
-    ///
-    /// # Errors
-    ///
-    /// [`UnitError::DistanceOutOfRange`] outside
-    /// [`Distance::MIN_MM`]..=[`Distance::MAX_MM`].
+    /**
+     * Builds a distance from millimetres.
+     *
+     * # Errors
+     *
+     * [`UnitError::DistanceOutOfRange`] outside
+     * [`Distance::MIN_MM`]..=[`Distance::MAX_MM`].
+     */
     pub const fn from_millimetres(mm: u32) -> Result<Self, UnitError> {
         if mm < Self::MIN_MM || mm > Self::MAX_MM {
             return Err(UnitError::DistanceOutOfRange(mm));
@@ -212,7 +220,7 @@ impl Distance {
         Ok(Self(mm))
     }
 
-    /// The distance in millimetres.
+    /** The distance in millimetres. */
     pub const fn millimetres(self) -> u32 {
         self.0
     }

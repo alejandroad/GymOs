@@ -1,10 +1,12 @@
-//! Workout sessions: the aggregate the user logs.
-//!
-//! A [`Session`] owns its exercises, and each [`SessionExercise`] owns its
-//! sets. Fields are private because these types have rules that span
-//! fields (a session can't end before it starts, and every set must match its
-//! exercise's tracking mode), so the only way to change them is through
-//! methods that check those rules.
+/*!
+ * Workout sessions: the aggregate the user logs.
+ *
+ * A [`Session`] owns its exercises, and each [`SessionExercise`] owns its
+ * sets. Fields are private because these types have rules that span
+ * fields (a session can't end before it starts, and every set must match its
+ * exercise's tracking mode), so the only way to change them is through
+ * methods that check those rules.
+ */
 
 use thiserror::Error;
 
@@ -14,23 +16,23 @@ use crate::set::LoggedSet;
 use crate::text::{Name, Note};
 use crate::time::Timestamp;
 
-/// Why a change to a session was rejected.
+/** Why a change to a session was rejected. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum SessionError {
-    /// The end time is before the start time.
+    /** The end time is before the start time. */
     #[error("a session cannot end before it starts")]
     EndsBeforeStart,
-    /// A set's measurements don't fit the exercise's tracking mode.
+    /** A set's measurements don't fit the exercise's tracking mode. */
     #[error("set is tracked as {found:?} but the exercise is tracked as {expected:?}")]
     ModeMismatch {
-        /// The exercise's tracking mode.
+        /** The exercise's tracking mode. */
         expected: TrackingMode,
-        /// The tracking mode of the rejected set.
+        /** The tracking mode of the rejected set. */
         found: TrackingMode,
     },
 }
 
-/// One exercise as performed within a session, with its sets in order.
+/** One exercise as performed within a session, with its sets in order. */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionExercise {
     exercise: ExerciseId,
@@ -40,7 +42,7 @@ pub struct SessionExercise {
 }
 
 impl SessionExercise {
-    /// Starts an empty entry for `exercise`, capturing its tracking mode.
+    /** Starts an empty entry for `exercise`, capturing its tracking mode. */
     pub fn new(exercise: &Exercise) -> Self {
         Self {
             exercise: exercise.id,
@@ -50,12 +52,14 @@ impl SessionExercise {
         }
     }
 
-    /// Appends a set.
-    ///
-    /// # Errors
-    ///
-    /// [`SessionError::ModeMismatch`] if the set's measurements belong to a
-    /// different tracking mode than the exercise.
+    /**
+     * Appends a set.
+     *
+     * # Errors
+     *
+     * [`SessionError::ModeMismatch`] if the set's measurements belong to a
+     * different tracking mode than the exercise.
+     */
     pub fn push_set(&mut self, set: LoggedSet) -> Result<(), SessionError> {
         let found = set.metrics.mode();
         if found != self.mode {
@@ -68,33 +72,33 @@ impl SessionExercise {
         Ok(())
     }
 
-    /// The exercise performed.
+    /** The exercise performed. */
     pub const fn exercise(&self) -> ExerciseId {
         self.exercise
     }
 
-    /// The tracking mode every set here uses.
+    /** The tracking mode every set here uses. */
     pub const fn mode(&self) -> TrackingMode {
         self.mode
     }
 
-    /// The sets, in the order they were performed.
+    /** The sets, in the order they were performed. */
     pub fn sets(&self) -> &[LoggedSet] {
         &self.sets
     }
 
-    /// A note on this exercise for this session.
+    /** A note on this exercise for this session. */
     pub const fn note(&self) -> Option<&Note> {
         self.note.as_ref()
     }
 
-    /// Replaces the note.
+    /** Replaces the note. */
     pub fn set_note(&mut self, note: Option<Note>) {
         self.note = note;
     }
 }
 
-/// A workout: what was done, when, and in what order.
+/** A workout: what was done, when, and in what order. */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
     id: SessionId,
@@ -108,7 +112,7 @@ pub struct Session {
 }
 
 impl Session {
-    /// Starts an empty, in-progress session.
+    /** Starts an empty, in-progress session. */
     pub const fn start(id: SessionId, started_at: Timestamp) -> Self {
         Self {
             id,
@@ -122,11 +126,13 @@ impl Session {
         }
     }
 
-    /// Marks the session finished.
-    ///
-    /// # Errors
-    ///
-    /// [`SessionError::EndsBeforeStart`] if `ended_at` is before the start.
+    /**
+     * Marks the session finished.
+     *
+     * # Errors
+     *
+     * [`SessionError::EndsBeforeStart`] if `ended_at` is before the start.
+     */
     pub fn finish(&mut self, ended_at: Timestamp) -> Result<(), SessionError> {
         if ended_at.is_before(self.started_at) {
             return Err(SessionError::EndsBeforeStart);
@@ -135,76 +141,84 @@ impl Session {
         Ok(())
     }
 
-    /// Appends an exercise. The same exercise may appear more than once.
+    /** Appends an exercise. The same exercise may appear more than once. */
     pub fn add_exercise(&mut self, exercise: SessionExercise) {
         self.exercises.push(exercise);
     }
 
-    /// Stable identity.
+    /** Stable identity. */
     pub const fn id(&self) -> SessionId {
         self.id
     }
 
-    /// When the session started.
+    /** When the session started. */
     pub const fn started_at(&self) -> Timestamp {
         self.started_at
     }
 
-    /// When the session ended, or `None` while in progress.
+    /** When the session ended, or `None` while in progress. */
     pub const fn ended_at(&self) -> Option<Timestamp> {
         self.ended_at
     }
 
-    /// The exercises, in the order they were performed.
+    /** The exercises, in the order they were performed. */
     pub fn exercises(&self) -> &[SessionExercise] {
         &self.exercises
     }
 
-    /// Mutable access for logging sets. Each [`SessionExercise`] still
-    /// enforces its own rules.
+    /**
+     * Mutable access for logging sets. Each [`SessionExercise`] still
+     * enforces its own rules.
+     */
     pub fn exercises_mut(&mut self) -> &mut [SessionExercise] {
         &mut self.exercises
     }
 
-    /// An optional title, such as "Heavy legs".
+    /** An optional title, such as "Heavy legs". */
     pub const fn title(&self) -> Option<&Name> {
         self.title.as_ref()
     }
 
-    /// Replaces the title.
+    /** Replaces the title. */
     pub fn set_title(&mut self, title: Option<Name>) {
         self.title = title;
     }
 
-    /// The template this session was started from, which decides what
-    /// "last time" compares against (§3.2).
+    /**
+     * The template this session was started from, which decides what
+     * "last time" compares against (§3.2).
+     */
     pub const fn template(&self) -> Option<TemplateId> {
         self.template
     }
 
-    /// Records which template this session came from.
+    /** Records which template this session came from. */
     pub fn set_template(&mut self, template: Option<TemplateId>) {
         self.template = template;
     }
 
-    /// Whether the user marked this session as a deload. A deload is never
-    /// counted as a regression (§3.3).
+    /**
+     * Whether the user marked this session as a deload. A deload is never
+     * counted as a regression (§3.3).
+     */
     pub const fn is_deload(&self) -> bool {
         self.deload
     }
 
-    /// Marks or unmarks the session as a deload. Only the user does this;
-    /// the engine may only suggest it.
+    /**
+     * Marks or unmarks the session as a deload. Only the user does this;
+     * the engine may only suggest it.
+     */
     pub fn set_deload(&mut self, deload: bool) {
         self.deload = deload;
     }
 
-    /// A note on the whole session.
+    /** A note on the whole session. */
     pub const fn note(&self) -> Option<&Note> {
         self.note.as_ref()
     }
 
-    /// Replaces the note.
+    /** Replaces the note. */
     pub fn set_note(&mut self, note: Option<Note>) {
         self.note = note;
     }

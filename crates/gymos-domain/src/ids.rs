@@ -1,8 +1,10 @@
-//! Typed identifiers.
-//!
-//! Each entity gets its own ID type, so a `SetId` can never be passed where a
-//! `SessionId` is expected. IDs are UUID v7 values generated outside the domain
-//! (by the engine's `IdGen` port) and only wrapped here.
+/*!
+ * Typed identifiers.
+ *
+ * Each entity gets its own ID type, so a `SetId` can never be passed where a
+ * `SessionId` is expected. IDs are UUID v7 values generated outside the domain
+ * (by the engine's `IdGen` port) and only wrapped here.
+ */
 
 use core::fmt;
 
@@ -15,12 +17,12 @@ macro_rules! id_type {
         pub struct $name(Uuid);
 
         impl $name {
-            /// Wraps an existing UUID. The domain never generates IDs itself.
+            /** Wraps an existing UUID. The domain never generates IDs itself. */
             pub const fn from_uuid(uuid: Uuid) -> Self {
                 Self(uuid)
             }
 
-            /// The underlying UUID.
+            /** The underlying UUID. */
             pub const fn as_uuid(self) -> Uuid {
                 self.0
             }
@@ -35,22 +37,22 @@ macro_rules! id_type {
 }
 
 id_type! {
-    /// Identifies a workout session.
+    /** Identifies a workout session. */
     SessionId
 }
 
 id_type! {
-    /// Identifies one logged set.
+    /** Identifies one logged set. */
     SetId
 }
 
 id_type! {
-    /// Identifies a catalog or custom exercise.
+    /** Identifies a catalog or custom exercise. */
     ExerciseId
 }
 
 id_type! {
-    /// Identifies a workout template (for example "Push A").
+    /** Identifies a workout template (for example "Push A"). */
     TemplateId
 }
 
