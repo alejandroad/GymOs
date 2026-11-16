@@ -1,0 +1,98 @@
+# GymOs Cargo workspace. See docs/design.md (DD-03) for the crate graph.
+#
+# This is a virtual manifest: it holds no package, so every cargo command
+# acts on the whole workspace by default and no crate is privileged by
+# sitting at the root.
+
+[workspace]
+# Set explicitly: a virtual manifest has no package edition to imply it.
+resolver = "3"
+# apps/desktop/src-tauri and xtask join this list when they are scaffolded.
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.0" # internal crates are not versioned; nothing is published yet
+edition = "2024"
+rust-version = "1.100" # keep in sync with rust-toolchain.toml
+license = "MIT"
+repository = "https://github.com/alejandroad/GymOs"
+publish = false
+
+# Every dependency version lives here, once. Members opt in with
+# `name.workspace = true`. A dependency, internal or external, is added in
+# the commit that first uses it (DD-10 rule 4), never ahead of time; cargo
+# warns on unused ones.
+#
+# Allowed internal edges (DD-03), enforced by deny.toml and review:
+#   gymos-engine  -> gymos-domain
+#   gymos-store   -> gymos-engine, gymos-domain
+#   gymos-testkit -> gymos-engine, gymos-domain   (dev-dependency only)
+#   gymos-desktop -> all of the above
+[workspace.dependencies]
+
+# ---------------------------------------------------------------------------
+# Lints. NOT inherited implicitly: every member needs `[lints] workspace = true`.
+# CI runs clippy with `-D warnings`, so "warn" here fails the build in CI
+# while staying non-blocking during local iteration.
+# ---------------------------------------------------------------------------
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"                 # default to pub(crate); lib.rs curates the API
+unused_qualifications = "warn"
+unused_lifetimes = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+# Groups first (lower priority), individual lints override them.
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# DD-07: no panics in library crates. Tests are exempted in clippy.toml.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+exit = "deny"
+indexing_slicing = "warn"
+string_slice = "warn"
+get_unwrap = "warn"
+
+# Unfinished or debug code must not reach main.
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+print_stdout = "warn" # libraries return values; only binaries print
+print_stderr = "warn"
+
+# DD-01: exhaustive matches are why we chose Rust. A `_ =>` arm on a domain
+# enum silently swallows a new variant.
+wildcard_enum_match_arm = "warn"
+
+# Every suppression is explicit, scoped and justified.
+allow_attributes = "warn"                 # prefer #[expect], which fails when no longer needed
+allow_attributes_without_reason = "warn"
+
+# Structure rules from docs/research (module layout).
+mod_module_files = "warn" # `foo.rs` + `foo/`, never `foo/mod.rs`
+
+# Hygiene.
+clone_on_ref_ptr = "warn"
+rc_buffer = "warn"
+lossy_float_literal = "warn"
+unnecessary_self_imports = "warn"
+verbose_file_reads = "warn"
+
+# Pedantic lints that cost more than they catch for this codebase.
+module_name_repetitions = "allow" # `records::RecordBook` reads fine
+must_use_candidate = "allow"      # applied deliberately, not on every getter
+
+# ---------------------------------------------------------------------------
+# Profiles
+# ---------------------------------------------------------------------------
+
+[profile.release]
+# A wrong PR or verdict is worse than a loud failure. Domain code uses
+# checked arithmetic explicitly; this is the backstop.
+overflow-checks = true

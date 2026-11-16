@@ -1,0 +1,140 @@
+# GymOs CI (DD-11). Every job here is a required check on `main`.
+#
+# Conventions:
+# - Third-party actions are pinned to a full commit SHA (tag in a comment);
+#   Dependabot bumps them. A moved tag can't change what runs here.
+# - The Rust toolchain comes from rust-toolchain.toml, so CI and local builds
+#   use the same compiler.
+# - Jobs for the UI, type drift, the Tauri build and e2e are added when the
+#   code they check exists.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+# Least privilege: jobs only read the repository.
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the stale run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0" # smaller caches, no benefit in one-shot CI builds
+  RUST_BACKTRACE: short
+
+jobs:
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: rustdoc
+        run: cargo doc --workspace --no-deps --all-features --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false # see every platform's failures, not just the first
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-nextest@0.9.152
+      - name: nextest
+        # --no-tests=pass: the crates are still empty. Remove it with the
+        # first test so an accidentally empty run fails.
+        run: cargo nextest run --workspace --all-features --locked --no-tests=pass
+      - name: doctests
+        run: cargo test --workspace --all-features --locked --doc
+
+  # ---------------------------------------------------------------------------
+  portability:
+    name: Kernel has no OS assumptions (wasm32)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Check domain and engine for wasm32-unknown-unknown
+        # wasm32 has no filesystem, clock or threads. If the kernel compiles
+        # here, it can't depend on any of them (design.md §1, "phone last").
+        run: cargo check -p gymos-domain -p gymos-engine --target wasm32-unknown-unknown --locked
+
+  # ---------------------------------------------------------------------------
+  deny:
+    name: Supply chain (cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: cargo-deny@0.20.2
+      - name: cargo deny
+        run: cargo deny --locked check
+
+  # ---------------------------------------------------------------------------
+  commits:
+    name: Commit format
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check Conventional Commits (DD-10)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # type(scope)!: subject  -- lowercase type, optional scope, no space before the colon
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .+'
+          status=0
+          while IFS= read -r subject; do
+            if [[ ! "$subject" =~ $pattern ]]; then
+              echo "::error::Not a Conventional Commit: $subject"
+              status=1
+            fi
+          done < <(git log --format=%s --no-merges "$BASE..$HEAD")
+          exit $status

@@ -1,0 +1,10 @@
+# Pinned so every machine and CI runner builds with the same compiler.
+# Bump deliberately in its own commit (`chore: bump rust to 1.x.y`), and keep
+# `rust-version` in the root Cargo.toml in sync.
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+# wasm32 has no filesystem, clock or threads. CI compiles the kernel crates
+# for it to prove they make no OS assumptions (design.md §1, "phone last").
+targets = ["wasm32-unknown-unknown"]
