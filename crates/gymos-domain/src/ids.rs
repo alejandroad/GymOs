@@ -56,6 +56,21 @@ id_type! {
     TemplateId
 }
 
+id_type! {
+    /** Identifies one measurement (a body-weight entry, a VO2 max reading). */
+    MeasurementId
+}
+
+id_type! {
+    /** Identifies one activity (a run, a ride, a yoga class). */
+    ActivityId
+}
+
+id_type! {
+    /** Identifies a user-defined custom metric (for example "Grip strength"). */
+    MetricId
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

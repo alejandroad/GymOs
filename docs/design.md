@@ -33,6 +33,7 @@
 | DD-11 | CI and security | GitHub Actions on Windows and macOS; `clippy`, `rustfmt`, `cargo-deny`; Tauri hardening |
 | DD-12 | Repo reset | Tag the TS/Node spike, clear it in commits, keep history |
 | DD-13 | Overload verdicts | Verdict + signal list (bool derived); exact integer e1RM; `LoadStep` for double progression; deloads never a baseline |
+| DD-14 | Profile and records | Stats page is a view; measurements are time series; custom metrics; one `Record` type: open subjects × closed kinds |
 
 ---
 
@@ -214,7 +215,9 @@
 **Gaps closed:**
 - **Gap 1: double progression must read as progress.** Under double progression (the default scheme, §3.2), reaching the top of the rep range means adding load, and reps fall back to the bottom: 100 kg × 8 → 102.5 kg × 6. Every §3.3 signal reads that as a drop (e1RM −3%, volume down). The `LoadStep` signal makes the verdict scheme-aware. **Prerequisite:** model `ProgressionScheme { rep_range, increment }` per exercise or template before this signal ships.
 - **Gap 2: deloads are never a baseline.** "Last time" selection skips sessions marked as a deload. Otherwise the session after a deload "progresses" on every signal.
-- **Gap 3: set pairing is defined.** `Working` and `Failure` sets are paired by order. `Drop` and `Backoff` sets are excluded from pairing but count toward volume. Warm-ups are excluded everywhere (`SetType::counts_by_default`).
+- **Gap 3: set pairing is defined.** `TopSet`, `Working` and `Failure` sets are paired by order. `Drop` and `Backoff` sets are excluded from pairing but count toward volume. Warm-ups are excluded everywhere (`SetType::counts_by_default`).
+  - A `TopSet` is the heaviest planned set, so a top set pairs with the previous session's top set first. A session with no top set falls back to plain order.
+  - This keeps "top set 100 → 102.5 kg" comparing like with like, even when the number of working sets before it changes.
 
 **Arithmetic and edge rules:**
 - **Formula: Epley**, `e1RM = w × (1 + r/30)`, for algorithm version 1. Why Epley over Brzycki (`w × 36 / (37 − r)`):
@@ -233,6 +236,46 @@
 - Baseline selection needs history, so it is an engine query (`gymos-engine/src/queries/last_time.rs`).
 
 **Testing:** the worked examples in the overload research spike (A–H, including double progression and mixed sessions) become golden files before the rule code exists (DD-09). Property tests cover the e1RM comparisons: they must be antisymmetric, and integer and float ordering must agree.
+
+### DD-14 · Profile, measurements, activities and records
+**Implements** `product.md` §3.5–3.6 in `gymos-domain`.
+
+**The stats and medals page is a view, not a struct.** It is an engine query that combines three sources:
+
+| Source | What it holds | Stored? |
+|---|---|---|
+| `Profile` | display name, `UnitPreferences`, optional `BirthYear` and `ReferencePopulation` | yes, one per device (D7) |
+| `Measurement` | time series: body weight, VO2 max, resting HR, custom metrics | yes |
+| `Record` | every PR across exercises, activities and measurements | derived, recomputable (§3.5) |
+
+The profile holds **no stats**:
+- "Current body weight" is the latest body-weight measurement, so it can't go stale. The history it keeps drives full-range charts (§1.2.2).
+- Bodyweight exercises resolve body weight *on the session date* with `body_weight_at` (§3.6).
+
+**Measurements.** `MeasurementValue` is an enum with one variant per kind (`BodyWeight`, `Vo2Max`, `RestingHeartRate`, `Custom`), the same pattern as `SetMetrics` (DD-08). Each kind knows which direction is better:
+- VO2 max: higher.
+- Resting HR: lower.
+- Body weight: **neither**. Up or down depends on the person's goal, so body weight gets a chart and no "best" record.
+
+**Custom metrics are the extension point.** A `CustomMetric { name, unit, better, decimals }` lets the athlete track anything (grip strength, vertical jump, waist size). Values are exact thousandths (`CustomValue`). Each metric automatically gets a chart and a best-value record.
+
+**Activities.** `Activity` is one struct with optional `ActivityDetails`, because activity kinds share almost every field. Fields stay private because rules tie them together:
+- distance only where the kind tracks one
+- moving time ≤ elapsed time
+- max HR ≥ average HR
+
+`ElapsedTime` allows up to 7 days for multi-day events, without loosening the 24 h cap on set durations.
+
+**Records: one generic type, a closed set of kinds.** `Record { subject, kind, value, better, achieved_at, source, previous, algorithm_version }`.
+- **Subject is open:** any exercise, any activity kind, any measurement series (custom metrics included), or `Overall`. A new exercise or metric gets records with no code change.
+- **`RecordKind` is closed:** each kind is a rule with its own detector and explanation, and the compiler checks every rule handles every kind. A free-form `String` → `f64` map was rejected: it would lose exactness (D10), compile-time checking, and the "every number explains itself" output (§1.2.7).
+- **`Quantity`** is a typed value (`Mass`, `Reps`, `Elapsed`, `Distance`, `Count`, …). Comparison only ranks like with like (`compare` returns `None` across variants), and a tie never counts as a new record.
+
+**Provenance on every user record.** Sessions, measurements and activities carry `Source::Manual | Import { format, importer_version }` (data-model rule 4). A bad importer version's rows can then be found and re-imported.
+
+**Privacy.** Birth year and reference population are optional and local, and only select a labelled percentile table later (D8). A year, not a date, keeps less data.
+
+**Scope of this decision:** types only. The record detectors arrive with the PR engine, and the stats view with the engine's `profile_stats` query.
 
 ---
 
@@ -275,6 +318,8 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 | OWASP ASVS pass | Once real features exist |
 | Overload signals for bodyweight modes (DD-13) | After the body-weight measurement model |
 | Weight-dependent 1RM formula as a new `ALGORITHM_VERSION` | Only if peer-reviewed evidence holds up |
+| Milestones and achievements beyond records (DD-14) | After M1, checked against the no-dark-patterns principle (§1.2.6) |
+| Per-exercise unit override (D10) | With the exercise catalog |
 
 ## 6. Open questions (decide at scaffold or schema time)
 

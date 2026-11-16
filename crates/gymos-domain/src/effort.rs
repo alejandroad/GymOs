@@ -1,8 +1,14 @@
-/*! Perceived effort: RPE or RIR, logged optionally per set. */
+/*!
+ * Perceived effort: RPE or RIR per set, and a 1–10 rating per activity.
+ */
 
 use thiserror::Error;
 
 /** Why an effort rating was rejected. */
+#[expect(
+    clippy::enum_variant_names,
+    reason = "each variant names the value that was out of range, as DD-07 errors do"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum EffortError {
     /** An RPE outside 1.0–10.0, or not on a half-point step. */
@@ -11,6 +17,44 @@ pub enum EffortError {
     /** An RIR above [`Rir::MAX`]. */
     #[error("RIR must be between 0 and 10, got {0}")]
     RirOutOfRange(u8),
+    /** A perceived effort outside 1–10. */
+    #[error("perceived effort must be between 1 and 10, got {0}")]
+    PerceivedEffortOutOfRange(u8),
+}
+
+/**
+ * How hard a whole activity felt, 1 (very easy) to 10 (maximal).
+ *
+ * A coarser, whole-number scale than the per-set [`Rpe`], matching what
+ * watches and activity logs record.
+ */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PerceivedEffort(u8);
+
+impl PerceivedEffort {
+    /** The easiest rating. */
+    pub const MIN: u8 = 1;
+    /** The hardest rating. */
+    pub const MAX: u8 = 10;
+
+    /**
+     * Builds a rating.
+     *
+     * # Errors
+     *
+     * [`EffortError::PerceivedEffortOutOfRange`] outside 1..=10.
+     */
+    pub const fn new(rating: u8) -> Result<Self, EffortError> {
+        if rating < Self::MIN || rating > Self::MAX {
+            return Err(EffortError::PerceivedEffortOutOfRange(rating));
+        }
+        Ok(Self(rating))
+    }
+
+    /** The rating. */
+    pub const fn get(self) -> u8 {
+        self.0
+    }
 }
 
 /**

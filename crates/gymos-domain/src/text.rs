@@ -63,6 +63,32 @@ impl Name {
     }
 }
 
+/** A short unit label for a custom metric, such as "kg", "cm" or "reps". */
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnitLabel(String);
+
+impl UnitLabel {
+    /** The longest label accepted, in characters. */
+    pub const MAX_CHARS: usize = 16;
+
+    /**
+     * Builds a unit label from user input, trimming surrounding whitespace.
+     *
+     * # Errors
+     *
+     * [`TextError`] if the label is empty, too long or contains any control
+     * character.
+     */
+    pub fn new(input: &str) -> Result<Self, TextError> {
+        clean(input, Self::MAX_CHARS, false).map(Self)
+    }
+
+    /** The label as text. */
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /** A free-text note on a set, exercise or session. May span several lines. */
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Note(String);

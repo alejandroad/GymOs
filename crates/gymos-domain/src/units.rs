@@ -27,6 +27,15 @@ pub enum UnitError {
     /** A distance outside [`Distance::MIN_MM`]..=[`Distance::MAX_MM`]. */
     #[error("distance must be between 1 mm and 1000 km, got {0} mm")]
     DistanceOutOfRange(u32),
+    /** An activity time outside [`ElapsedTime::MIN`]..=[`ElapsedTime::MAX`]. */
+    #[error("elapsed time must be between 1 second and 7 days, got {0} s")]
+    ElapsedOutOfRange(u32),
+    /** Energy above [`Energy::MAX_KCAL`]. */
+    #[error("energy must not exceed 20000 kcal, got {0}")]
+    EnergyOutOfRange(u32),
+    /** Elevation gain above [`ElevationGain::MAX_M`]. */
+    #[error("elevation gain must not exceed 20000 m, got {0}")]
+    ElevationOutOfRange(u32),
 }
 
 const NANOGRAMS_PER_KILOGRAM: i64 = 1_000_000_000_000;
@@ -40,6 +49,14 @@ pub struct Mass(i64);
 impl Mass {
     /** No mass at all. */
     pub const ZERO: Self = Self(0);
+
+    /**
+     * Wraps a raw nanogram count. Crate-internal: outside code builds masses
+     * through validated types such as [`Load`].
+     */
+    pub(crate) const fn from_nanograms(nanograms: i64) -> Self {
+        Self(nanograms)
+    }
 
     /** The exact value in nanograms. */
     pub const fn nanograms(self) -> i64 {
@@ -222,6 +239,100 @@ impl Distance {
 
     /** The distance in millimetres. */
     pub const fn millimetres(self) -> u32 {
+        self.0
+    }
+}
+
+/* Activity quantities */
+
+/**
+ * How long an activity took, in whole seconds.
+ *
+ * Separate from [`DurationSecs`] because activities can run for days (an
+ * ultra, a multi-day hike), while a set longer than a day is a typo.
+ */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ElapsedTime(u32);
+
+impl ElapsedTime {
+    /** The shortest time accepted. */
+    pub const MIN: u32 = 1;
+    /** The longest time accepted: 7 days. */
+    pub const MAX: u32 = 7 * 24 * 60 * 60;
+
+    /**
+     * Builds an elapsed time.
+     *
+     * # Errors
+     *
+     * [`UnitError::ElapsedOutOfRange`] outside
+     * [`ElapsedTime::MIN`]..=[`ElapsedTime::MAX`].
+     */
+    pub const fn new(seconds: u32) -> Result<Self, UnitError> {
+        if seconds < Self::MIN || seconds > Self::MAX {
+            return Err(UnitError::ElapsedOutOfRange(seconds));
+        }
+        Ok(Self(seconds))
+    }
+
+    /** The time in seconds. */
+    pub const fn seconds(self) -> u32 {
+        self.0
+    }
+}
+
+/** Energy expended, in whole kilocalories. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Energy(u32);
+
+impl Energy {
+    /** The most energy accepted for one activity. */
+    pub const MAX_KCAL: u32 = 20_000;
+
+    /**
+     * Builds an energy value.
+     *
+     * # Errors
+     *
+     * [`UnitError::EnergyOutOfRange`] above [`Energy::MAX_KCAL`].
+     */
+    pub const fn from_kcal(kcal: u32) -> Result<Self, UnitError> {
+        if kcal > Self::MAX_KCAL {
+            return Err(UnitError::EnergyOutOfRange(kcal));
+        }
+        Ok(Self(kcal))
+    }
+
+    /** The energy in kilocalories. */
+    pub const fn kcal(self) -> u32 {
+        self.0
+    }
+}
+
+/** Total climb during an activity, in whole metres. Zero is a flat route. */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ElevationGain(u32);
+
+impl ElevationGain {
+    /** The most climb accepted for one activity. */
+    pub const MAX_M: u32 = 20_000;
+
+    /**
+     * Builds an elevation gain.
+     *
+     * # Errors
+     *
+     * [`UnitError::ElevationOutOfRange`] above [`ElevationGain::MAX_M`].
+     */
+    pub const fn from_metres(metres: u32) -> Result<Self, UnitError> {
+        if metres > Self::MAX_M {
+            return Err(UnitError::ElevationOutOfRange(metres));
+        }
+        Ok(Self(metres))
+    }
+
+    /** The climb in metres. */
+    pub const fn metres(self) -> u32 {
         self.0
     }
 }

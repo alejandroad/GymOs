@@ -12,6 +12,7 @@ use thiserror::Error;
 
 use crate::exercise::{Exercise, TrackingMode};
 use crate::ids::{ExerciseId, SessionId, TemplateId};
+use crate::provenance::Source;
 use crate::set::LoggedSet;
 use crate::text::{Name, Note};
 use crate::time::Timestamp;
@@ -109,11 +110,12 @@ pub struct Session {
     deload: bool,
     note: Option<Note>,
     exercises: Vec<SessionExercise>,
+    source: Source,
 }
 
 impl Session {
-    /** Starts an empty, in-progress session. */
-    pub const fn start(id: SessionId, started_at: Timestamp) -> Self {
+    /** Starts an empty, in-progress session, recording where it came from. */
+    pub const fn start(id: SessionId, started_at: Timestamp, source: Source) -> Self {
         Self {
             id,
             started_at,
@@ -123,6 +125,7 @@ impl Session {
             deload: false,
             note: None,
             exercises: Vec::new(),
+            source,
         }
     }
 
@@ -149,6 +152,11 @@ impl Session {
     /** Stable identity. */
     pub const fn id(&self) -> SessionId {
         self.id
+    }
+
+    /** Typed in, or imported. */
+    pub const fn source(&self) -> Source {
+        self.source
     }
 
     /** When the session started. */
@@ -286,7 +294,11 @@ mod tests {
 
     #[test]
     fn starts_in_progress_and_finishes() {
-        let mut session = Session::start(SessionId::from_uuid(Uuid::from_u128(3)), at(1_000));
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(1_000),
+            Source::Manual,
+        );
         assert_eq!(session.ended_at(), None);
         session.finish(at(5_000)).unwrap();
         assert_eq!(session.ended_at(), Some(at(5_000)));
@@ -294,7 +306,11 @@ mod tests {
 
     #[test]
     fn cannot_end_before_it_starts() {
-        let mut session = Session::start(SessionId::from_uuid(Uuid::from_u128(3)), at(5_000));
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(5_000),
+            Source::Manual,
+        );
         assert_eq!(
             session.finish(at(1_000)),
             Err(SessionError::EndsBeforeStart)
@@ -304,7 +320,11 @@ mod tests {
 
     #[test]
     fn logs_sets_through_the_session() {
-        let mut session = Session::start(SessionId::from_uuid(Uuid::from_u128(3)), at(0));
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(0),
+            Source::Manual,
+        );
         session.add_exercise(SessionExercise::new(&bench()));
         let metrics = SetMetrics::WeightReps {
             load: Load::new(6_000, WeightUnit::Kilograms).unwrap(),
