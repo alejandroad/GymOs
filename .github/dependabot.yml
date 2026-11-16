@@ -1,0 +1,23 @@
+# Dependency updates (DD-11). Each bump arrives as its own small PR, which
+# matches the one-kind-per-commit rule (DD-10). Commit prefixes keep the
+# Conventional Commits check green.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

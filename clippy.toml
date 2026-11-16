@@ -1,0 +1,39 @@
+# Workspace-wide clippy configuration.
+#
+# Clippy reads only the nearest clippy.toml and does not merge files, so keep
+# all configuration here rather than adding per-crate files.
+
+# --- Test exemptions: tests may panic, index and print freely. -------------
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+
+# Project names that `doc_markdown` would otherwise want in backticks.
+# ".." keeps clippy's built-in list.
+doc-valid-idents = ["GymOs", "SQLite", ".."]
+
+# Nothing is published, so clippy may suggest API-changing fixes.
+avoid-breaking-exported-api = false
+
+# --- Determinism and injection (DD-03, product D9) -------------------------
+# Time, randomness and environment come in through engine ports. The single
+# real implementation of each lives in the shell and opts out explicitly with
+# `#[expect(clippy::disallowed_methods, reason = "...")]`, which keeps every
+# escape hatch greppable.
+disallowed-methods = [
+  { path = "std::time::SystemTime::now", reason = "inject a `Clock` port (DD-03)" },
+  { path = "std::time::Instant::now", reason = "inject a `Clock` port (DD-03)" },
+  { path = "std::env::var", reason = "configuration is resolved by the shell and passed in" },
+  { path = "std::env::vars", reason = "configuration is resolved by the shell and passed in" },
+  { path = "std::env::current_dir", reason = "paths are resolved by the shell and passed in" },
+]
+
+# HashMap/HashSet iterate in random order. Verdict explanations, PR lists and
+# exports must be byte-for-byte reproducible, so default to ordered maps.
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "random iteration order breaks determinism (D9); use BTreeMap" },
+  { path = "std::collections::HashSet", reason = "random iteration order breaks determinism (D9); use BTreeSet" },
+]

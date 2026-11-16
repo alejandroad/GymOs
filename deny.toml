@@ -1,0 +1,75 @@
+# cargo-deny policy (DD-11). Run with `cargo deny check`.
+# Reference: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Check every feature combination we could ship, not just the defaults.
+all-features = true
+# Only the platforms we build for. Keeps Linux/Android-only crates from
+# triggering findings until the phone milestone adds those targets.
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "wasm32-unknown-unknown",
+]
+
+# --- Security: RustSec advisories -------------------------------------------
+[advisories]
+# Vulnerabilities, unmaintained and unsound crates all fail by default.
+# Every ignore needs an advisory ID, a reason and a revisit date.
+ignore = []
+
+# --- Licenses: everything must be compatible with shipping an MIT binary ----
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "BSL-1.0",
+  "CC0-1.0",
+]
+# Copyleft licenses (MPL-2.0 is common in the Tauri tree) are added one by
+# one under `exceptions`, with the crate name and a justification.
+exceptions = []
+confidence-threshold = 0.93
+
+[licenses.private]
+# Our own unpublished crates have no license metadata to check.
+ignore = true
+
+# --- Bans: duplicate versions, wildcards and the layer rules ----------------
+[bans]
+multiple-versions = "warn" # the Tauri tree brings duplicates; review, don't block
+wildcards = "deny"
+allow-wildcard-paths = true # internal `path =` dependencies are fine
+highlight = "all"
+
+# Architecture enforcement (DD-03). A `wrappers` list names the only crates
+# allowed to depend on the banned crate directly; every other path to it fails.
+deny = [
+  { crate = "rusqlite", wrappers = [
+    "gymos-store",
+    "rusqlite_migration",
+  ], reason = "SQLite is an adapter detail: only gymos-store may touch it (DD-03, DD-04)" },
+  { crate = "libsqlite3-sys", wrappers = [
+    "rusqlite",
+  ], reason = "SQLite is reached through rusqlite only" },
+  { crate = "tauri", wrappers = [
+    "gymos-desktop",
+  ], reason = "Tauri is the shell: the kernel must not know it exists (DD-03). Add tauri-specta and tauri-plugin-* here as they are adopted." },
+]
+
+skip = []
+skip-tree = []
+
+# --- Sources: crates.io only ------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
