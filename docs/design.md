@@ -32,6 +32,7 @@
 | DD-10 | Workflow | Trunk-based on `main`; strict small-commit rules |
 | DD-11 | CI and security | GitHub Actions on Windows and macOS; `clippy`, `rustfmt`, `cargo-deny`; Tauri hardening |
 | DD-12 | Repo reset | Tag the TS/Node spike, clear it in commits, keep history |
+| DD-13 | Overload verdicts | Verdict + signal list (bool derived); exact integer e1RM; `LoadStep` for double progression; deloads never a baseline |
 
 ---
 
@@ -183,6 +184,56 @@
 - ADR 0001 was marked **Superseded**, then removed along with `docs/HANDOFF.md` in `368e165`. Both remain in git history. The product definition (handoff §1 and §3) now lives in [`docs/product.md`](product.md).
 - Retire `dev`.
 
+### DD-13 · Progressive overload verdicts
+**Refines** `product.md` §3.3. The product rules stay the same; this decision fixes how they are computed and closes three gaps found while researching them.
+
+**Shape: a verdict plus a list of signals, not a boolean.**
+- Each exercise in a session gets an `ExerciseVerdict`: one `Verdict` (`Progressed | Matched | Regressed | InsufficientData | Deload`), **every** `Signal` that fired (positive and negative, strongest first) and the `algorithm_version`.
+- Each signal carries its before and after values, so the UI renders *"+1 rep at 100 kg on set 2 (8→9)"* without recomputing anything.
+- The yes/no answer is derived: `ExerciseVerdict::is_progressive_overload()` is true exactly when the verdict is `Progressed`. A stored boolean alone would lose first sessions, deloads, matched sessions and mixed results.
+
+**Verdict rules, evaluated in order:**
+1. The session is marked as a deload → `Deload` (signals are still listed).
+2. No baseline, or no comparable sets → `InsufficientData`.
+3. Any positive signal → `Progressed` ("any one counts", §3.3).
+4. Otherwise, any negative signal → `Regressed`.
+5. Otherwise → `Matched`.
+
+**Signals** (`WeightReps` first; other tracking modes follow the same pattern with fewer signals):
+
+| Signal | Fires when |
+|---|---|
+| `E1rm` | the best set's estimated 1RM changed (Epley, RPE-adjusted via RIR = 10 − RPE) |
+| `RepsAtLoad` | a paired set did more or fewer reps at the same load |
+| `LoadAtReps` | a paired set used more or less load at the same reps |
+| `LoadStep` | the top working load increased **and** reps are still at or above the scheme's minimum (gap 1) |
+| `WorkingSets` | more or fewer counted sets at the same load × reps |
+| `VolumeLoad` | Σ load × reps over counted sets changed, without the e1RM dropping |
+| `Effort` | the same work at a lower or higher RPE |
+
+**Gaps closed:**
+- **Gap 1: double progression must read as progress.** Under double progression (the default scheme, §3.2), reaching the top of the rep range means adding load, and reps fall back to the bottom: 100 kg × 8 → 102.5 kg × 6. Every §3.3 signal reads that as a drop (e1RM −3%, volume down). The `LoadStep` signal makes the verdict scheme-aware. **Prerequisite:** model `ProgressionScheme { rep_range, increment }` per exercise or template before this signal ships.
+- **Gap 2: deloads are never a baseline.** "Last time" selection skips sessions marked as a deload. Otherwise the session after a deload "progresses" on every signal.
+- **Gap 3: set pairing is defined.** `Working` and `Failure` sets are paired by order. `Drop` and `Backoff` sets are excluded from pairing but count toward volume. Warm-ups are excluded everywhere (`SetType::counts_by_default`).
+
+**Arithmetic and edge rules:**
+- **Formula: Epley**, `e1RM = w × (1 + r/30)`, for algorithm version 1. Why Epley over Brzycki (`w × 36 / (37 − r)`):
+  - It's linear in reps and defined for every rep count. Brzycki has a pole at 37 reps.
+  - The two agree exactly at 10 reps and differ by at most about 4% between 2 and 12 reps (Epley is higher below 10, lower above). A verdict compares the same formula on both sides, so the choice rarely flips one.
+  - It's the formula lifters most often recognise, which helps the "every number explains itself" principle.
+
+  Switching formulas later is a new `ALGORITHM_VERSION`, recomputed locally (§3.5).
+- **A single rep is the 1RM.** Epley gives 1.033 × w at one rep, so a true single would beat itself. For `r = 1`, e1RM is `w`.
+- **Exact comparisons.** Epley is a ratio, so "did e1RM go up" is decided by cross-multiplying integer `Mass` values in `i128`: `w₁·k(r₁)` vs `w₂·k(r₂)`, where `k(r) = 30 + r`, and `k(1) = 30` for the single-rep rule. RPE adjustment uses half-reps to stay integral (`2·r_eff = 2r + 20 − rpe_half_points`). Floats are used only to display values such as "124.0 → 126.7 kg".
+- **e1RM above 12 reps is skipped.** The formulas lose accuracy past about 10–12 reps. The skip is recorded so the explanation stays honest, and reps and volume still apply.
+- **Cross-unit "same load".** 100 kg and 220.46 lb differ by about 1 g. For **pairing only**, loads within 0.5% count as the same load. This is a versioned threshold. Every other comparison stays exact.
+
+**Placement** (follows DD-03):
+- Pure rules in `gymos-domain/src/progression/` (`e1rm.rs`, `signals.rs`, `verdict.rs`) plus `ALGORITHM_VERSION`.
+- Baseline selection needs history, so it is an engine query (`gymos-engine/src/queries/last_time.rs`).
+
+**Testing:** the worked examples in the overload research spike (A–H, including double progression and mixed sessions) become golden files before the rule code exists (DD-09). Property tests cover the e1RM comparisons: they must be antisymmetric, and integer and float ordering must agree.
+
 ---
 
 ## 4. Target repository layout
@@ -222,6 +273,8 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 | Phone app (Tauri mobile vs UniFFI + native) | Final milestone |
 | Leptos UI | Possible v2 only |
 | OWASP ASVS pass | Once real features exist |
+| Overload signals for bodyweight modes (DD-13) | After the body-weight measurement model |
+| Weight-dependent 1RM formula as a new `ALGORITHM_VERSION` | Only if peer-reviewed evidence holds up |
 
 ## 6. Open questions (decide at scaffold or schema time)
 
@@ -230,3 +283,4 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 3. **UI libraries:** component kit (shadcn/ui?) and data fetching over IPC (TanStack Query?).
 4. **Command model:** keep the handoff's command + outbox write model in the engine from day one, or add the outbox with sync.
 5. **Timeline:** re-plan M1 after the scaffold, based on actual Rust velocity.
+6. **Session-level overload boolean (DD-13):** the spec only gives counts ("4 of 6 exercises progressed"). If a single session yes/no is wanted, define it explicitly, for example "at least one exercise progressed and none regressed". This is a product decision, not something the engine infers.
