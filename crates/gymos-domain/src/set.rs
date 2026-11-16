@@ -23,6 +23,8 @@ pub enum SetType {
     Drop,
     /** Taken to muscular failure. */
     Failure,
+    /** The heaviest set of the exercise, from which back-off sets are reduced. */
+    TopSet,
     /** A lighter back-off set after the top set. */
     Backoff,
 }
@@ -35,7 +37,7 @@ impl SetType {
     pub const fn counts_by_default(self) -> bool {
         match self {
             Self::Warmup => false,
-            Self::Working | Self::Drop | Self::Failure | Self::Backoff => true,
+            Self::Working | Self::Drop | Self::Failure | Self::TopSet | Self::Backoff => true,
         }
     }
 }
@@ -151,6 +153,7 @@ mod tests {
         assert!(SetType::Working.counts_by_default());
         assert!(SetType::Drop.counts_by_default());
         assert!(SetType::Failure.counts_by_default());
+        assert!(SetType::TopSet.counts_by_default());
         assert!(SetType::Backoff.counts_by_default());
     }
 
