@@ -57,7 +57,7 @@ crates/gymos-domain/tests/
 └─ properties.rs               proptest: e1RM ordering properties
 ```
 
-`crates/gymos-domain/src/progression/` already exists as an empty folder. `ALGORITHM_VERSION` already exists in `lib.rs`; reuse it, don't redefine it.
+Create `crates/gymos-domain/src/progression/` (git does not track empty folders, so it won't exist in a fresh clone). `ALGORITHM_VERSION` already exists in `lib.rs`; reuse it, don't redefine it.
 
 ## 5. Design: the decisions you must follow
 
@@ -211,4 +211,4 @@ All examples use `WeightReps` and kg unless noted. "×" means reps. Expected e1R
 
 - The remote still has retired branches (`dev`, `e0/*`, `rust-setup`). Delete them per DD-12 once confirmed unused.
 - Recent commits like `lint : …`, `added TopSet…` and `Updated design.md…` don't follow Conventional Commits. The CI commit check will reject them on future PRs.
-- `crates/gymos-domain/src/{records,set,units}/` are empty folders from the scaffold. Remove them, or let modules grow into them.
+- The owner's local checkout has empty scaffold folders (`crates/*/src/{commands,ports,queries,rows,…}`). Git doesn't track empty folders, so they aren't in the repo. Create folders as modules need them; don't rely on them existing.

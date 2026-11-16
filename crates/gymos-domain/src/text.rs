@@ -2,7 +2,8 @@
  * User-entered text: names and notes.
  *
  * Text is trimmed and length-checked in characters, not bytes. Control
- * characters are rejected (notes may keep newlines and tabs), so stored text
+ * characters are rejected (notes may keep newlines and tabs, and their
+ * `\r\n` or lone `\r` line endings are stored as `\n`), so stored text
  * can't smuggle terminal escapes or invisible content into exports or logs.
  */
 
@@ -23,6 +24,14 @@ pub enum TextError {
 }
 
 fn clean(input: &str, max_chars: usize, allow_line_breaks: bool) -> Result<String, TextError> {
+    /* Notes pasted on Windows or imported from CSV use `\r\n` or a lone `\r`. */
+    let normalized;
+    let input = if allow_line_breaks && input.contains('\r') {
+        normalized = input.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        input
+    };
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Err(TextError::Empty);
@@ -103,7 +112,8 @@ impl Note {
      * # Errors
      *
      * [`TextError`] if the note is empty, too long or contains a control
-     * character other than newline or tab.
+     * character other than newline or tab. Windows (`\r\n`) and old Mac
+     * (`\r`) line endings are first converted to `\n`.
      */
     pub fn new(input: &str) -> Result<Self, TextError> {
         clean(input, Self::MAX_CHARS, true).map(Self)
@@ -155,5 +165,16 @@ mod tests {
             Note::new("hi \u{1b}[31mred"),
             Err(TextError::ControlCharacter)
         );
+    }
+
+    #[test]
+    fn notes_normalize_windows_line_endings() {
+        assert_eq!(Note::new("a\r\nb\rc").unwrap().as_str(), "a\nb\nc");
+    }
+
+    #[test]
+    fn names_still_reject_carriage_returns() {
+        assert_eq!(Name::new("Push\r\nA"), Err(TextError::ControlCharacter));
+        assert_eq!(UnitLabel::new("k\rg"), Err(TextError::ControlCharacter));
     }
 }

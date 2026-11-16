@@ -8,7 +8,7 @@
 
 use thiserror::Error;
 
-use crate::units::{Load, Mass};
+use crate::units::{Load, Mass, NANOGRAMS_PER_KILOGRAM};
 
 /** Why a health value was rejected. */
 #[expect(
@@ -27,8 +27,6 @@ pub enum HealthError {
     #[error("heart rate must be between 20 and 250 bpm, got {0}")]
     HeartRateOutOfRange(u8),
 }
-
-const NANOGRAMS_PER_KILOGRAM: i64 = 1_000_000_000_000;
 
 /**
  * A person's body weight, kept exactly as entered (value and unit).

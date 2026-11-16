@@ -266,6 +266,11 @@ The profile holds **no stats**:
 
 `ElapsedTime` allows up to 7 days for multi-day events, without loosening the 24 h cap on set durations.
 
+- **22 activity kinds,** grouped into endurance, gym/classes and sports. Each kind declares whether it tracks distance.
+- **Indoor vs outdoor is a detail, not a kind.** `Environment::{Indoor, Outdoor}` is an optional field. A treadmill run is a `Run` that took place `Indoor`, which avoids doubling the enum.
+- **Strength training never duplicates sets.** `ActivityKind::StrengthTraining` holds a summary (often a watch's HR and energy). It can link to the logged `Session` through `linked_session`, and only that kind may link.
+- **Activities carry no overload verdict.** Verdicts are derived data computed per strength exercise (DD-13). A linked strength activity's verdicts are its session's verdicts.
+
 **Records: one generic type, a closed set of kinds.** `Record { subject, kind, value, better, achieved_at, source, previous, algorithm_version }`.
 - **Subject is open:** any exercise, any activity kind, any measurement series (custom metrics included), or `Overall`. A new exercise or metric gets records with no code change.
 - **`RecordKind` is closed:** each kind is a rule with its own detector and explanation, and the compiler checks every rule handles every kind. A free-form `String` → `f64` map was rejected: it would lose exactness (D10), compile-time checking, and the "every number explains itself" output (§1.2.7).
@@ -329,3 +334,4 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 4. **Command model:** keep the handoff's command + outbox write model in the engine from day one, or add the outbox with sync.
 5. **Timeline:** re-plan M1 after the scaffold, based on actual Rust velocity.
 6. **Session-level overload boolean (DD-13):** the spec only gives counts ("4 of 6 exercises progressed"). If a single session yes/no is wanted, define it explicitly, for example "at least one exercise progressed and none regressed". This is a product decision, not something the engine infers.
+7. **Indoor vs outdoor records (DD-14):** should a treadmill 5 km and a road 5 km share one "fastest 5 km" record? Indoor distances are machine estimates. Leaning: separate records when the environment is known. Decide with the record detectors.

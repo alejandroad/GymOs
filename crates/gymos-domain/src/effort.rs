@@ -11,8 +11,8 @@ use thiserror::Error;
 )]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum EffortError {
-    /** An RPE outside 1.0–10.0, or not on a half-point step. */
-    #[error("RPE must be 1.0 to 10.0 in steps of 0.5, got {0} half-points")]
+    /** An RPE outside 1.0–10.0. */
+    #[error("RPE must be between 1.0 and 10.0 (2 to 20 half-points), got {0} half-points")]
     RpeOutOfRange(u8),
     /** An RIR above [`Rir::MAX`]. */
     #[error("RIR must be between 0 and 10, got {0}")]

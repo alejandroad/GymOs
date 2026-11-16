@@ -103,6 +103,10 @@ pub struct Measurement {
  * taken on or before that instant (product §3.6). Used to resolve body
  * weight for bodyweight exercises on the session date.
  *
+ * If several weigh-ins share the latest instant, the one with the larger
+ * [`MeasurementId`] wins (ids are UUID v7, so that is the one recorded
+ * last), making the result independent of slice order.
+ *
  * Returns `None` if there is no body-weight entry that early.
  */
 pub fn body_weight_at(measurements: &[Measurement], at: Timestamp) -> Option<BodyWeight> {
@@ -110,12 +114,14 @@ pub fn body_weight_at(measurements: &[Measurement], at: Timestamp) -> Option<Bod
         .iter()
         .filter(|m| !at.is_before(m.measured_at))
         .filter_map(|m| match m.value {
-            MeasurementValue::BodyWeight(weight) => Some((m.measured_at.unix_millis(), weight)),
+            MeasurementValue::BodyWeight(weight) => {
+                Some(((m.measured_at.unix_millis(), m.id), weight))
+            }
             MeasurementValue::Vo2Max(_)
             | MeasurementValue::RestingHeartRate(_)
             | MeasurementValue::Custom { .. } => None,
         })
-        .max_by_key(|(when, _)| *when)
+        .max_by_key(|(key, _)| *key)
         .map(|(_, weight)| weight)
 }
 
@@ -189,5 +195,19 @@ mod tests {
             Some(Better::Lower)
         );
         assert_eq!(MeasurementKind::BodyWeight.built_in_better(), None);
+    }
+
+    #[test]
+    fn ties_at_the_same_instant_go_to_the_larger_id() {
+        let earlier_id = weigh_in(1, 2_000, 8_000);
+        let later_id = weigh_in(2, 2_000, 8_100);
+        let forward = [earlier_id.clone(), later_id.clone()];
+        let backward = [later_id, earlier_id];
+        let expected = Some(8_100);
+        let hundredths = |history: &[Measurement]| {
+            body_weight_at(history, at(3_000)).map(|w| w.load().hundredths())
+        };
+        assert_eq!(hundredths(&forward), expected);
+        assert_eq!(hundredths(&backward), expected);
     }
 }

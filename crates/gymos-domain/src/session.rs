@@ -99,7 +99,12 @@ impl SessionExercise {
     }
 }
 
-/** A workout: what was done, when, and in what order. */
+/**
+ * A workout: what was done, when, and in what order.
+ *
+ * Finished sessions stay editable by design: past sessions can be corrected
+ * or deleted (product §3.5), and derived data such as records is recomputed.
+ */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
     id: SessionId,
@@ -130,7 +135,8 @@ impl Session {
     }
 
     /**
-     * Marks the session finished.
+     * Marks the session finished. On an already finished session, this
+     * corrects its end time.
      *
      * # Errors
      *
@@ -326,6 +332,25 @@ mod tests {
             Source::Manual,
         );
         session.add_exercise(SessionExercise::new(&bench()));
+        let metrics = SetMetrics::WeightReps {
+            load: Load::new(6_000, WeightUnit::Kilograms).unwrap(),
+            reps: Reps::new(8).unwrap(),
+        };
+        session.exercises_mut()[0].push_set(set(metrics)).unwrap();
+        assert_eq!(session.exercises()[0].sets().len(), 1);
+    }
+
+    #[test]
+    fn finished_sessions_stay_editable() {
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(0),
+            Source::Manual,
+        );
+        session.add_exercise(SessionExercise::new(&bench()));
+        session.finish(at(5_000)).unwrap();
+        session.finish(at(7_000)).unwrap();
+        assert_eq!(session.ended_at(), Some(at(7_000)));
         let metrics = SetMetrics::WeightReps {
             load: Load::new(6_000, WeightUnit::Kilograms).unwrap(),
             reps: Reps::new(8).unwrap(),

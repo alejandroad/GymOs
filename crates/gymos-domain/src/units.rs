@@ -38,7 +38,8 @@ pub enum UnitError {
     ElevationOutOfRange(u32),
 }
 
-const NANOGRAMS_PER_KILOGRAM: i64 = 1_000_000_000_000;
+/** Nanograms in one kilogram: the scale of [`Mass`]. */
+pub(crate) const NANOGRAMS_PER_KILOGRAM: i64 = 1_000_000_000_000;
 
 /* Mass */
 

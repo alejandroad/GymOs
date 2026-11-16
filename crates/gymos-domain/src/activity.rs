@@ -6,13 +6,18 @@
  * one struct with optional details. The rules that tie fields together
  * (moving time within elapsed time, distance only where it means something)
  * are checked whenever details are set, so the fields stay private.
+ *
+ * Indoor versus outdoor is a detail ([`Environment`]), not a separate kind,
+ * so "treadmill run" is a `Run` that took place `Indoor`. A strength-training
+ * activity (usually a watch summary) can link to the logged
+ * [`Session`](crate::Session) instead of repeating its sets.
  */
 
 use thiserror::Error;
 
 use crate::effort::PerceivedEffort;
 use crate::health::HeartRate;
-use crate::ids::ActivityId;
+use crate::ids::{ActivityId, SessionId};
 use crate::provenance::Source;
 use crate::text::{Name, Note};
 use crate::time::Timestamp;
@@ -30,29 +35,66 @@ pub enum ActivityError {
     /** A maximum heart rate below the average. */
     #[error("maximum heart rate cannot be below the average")]
     MaxHeartRateBelowAverage,
+    /** A linked session on a kind other than strength training. */
+    #[error("only strength-training activities can link to a session, not {0:?}")]
+    SessionLinkNotAllowed(ActivityKind),
 }
 
 /** The type of activity. Decides which details make sense. */
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ActivityKind {
-    /** Running. */
+    /* Endurance */
+    /** Running: road, trail or treadmill. */
     Run,
-    /** Cycling. */
+    /** Cycling: road, gravel, mountain or indoor trainer. */
     Ride,
-    /** Swimming. */
+    /** Swimming: pool or open water. */
     Swim,
     /** Walking. */
     Walk,
     /** Hiking. */
     Hike,
-    /** Rowing. */
+    /** Rowing: on the water or an erg. */
     Row,
+    /** Elliptical trainer. */
+    Elliptical,
+    /** Stair stepper or stair climbing. */
+    StairStepper,
+    /** Kayak, canoe or stand-up paddleboard. */
+    Paddle,
+    /** Alpine or cross-country skiing, and snowboarding. */
+    Ski,
+    /** Skating: inline, ice or skateboard. */
+    Skate,
+
+    /* Gym and classes */
+    /**
+     * Strength training recorded as a summary (often from a watch). The sets
+     * themselves belong in a [`Session`](crate::Session); link it with
+     * [`ActivityDetails::linked_session`].
+     */
+    StrengthTraining,
+    /** High-intensity interval training and circuits. */
+    Hiit,
+    /** Pilates. */
+    Pilates,
+    /** Yoga and mobility. */
+    Yoga,
+    /** Dance. */
+    Dance,
+
+    /* Sports */
     /** Martial arts, boxing and similar. */
     Combat,
     /** Climbing and bouldering. */
     Climbing,
-    /** Yoga and mobility. */
-    Yoga,
+    /** Team sports: football, basketball, hockey and similar. */
+    TeamSport,
+    /** Racket sports: tennis, padel, pickleball, squash. */
+    RacketSport,
+    /** Golf. */
+    Golf,
+
     /** Anything else. */
     Other,
 }
@@ -67,10 +109,39 @@ impl ActivityKind {
             | Self::Walk
             | Self::Hike
             | Self::Row
+            | Self::Elliptical
+            | Self::Paddle
+            | Self::Ski
+            | Self::Skate
+            | Self::TeamSport
+            | Self::Golf
             | Self::Other => true,
-            Self::Combat | Self::Climbing | Self::Yoga => false,
+            Self::StairStepper
+            | Self::StrengthTraining
+            | Self::Hiit
+            | Self::Pilates
+            | Self::Yoga
+            | Self::Dance
+            | Self::Combat
+            | Self::Climbing
+            | Self::RacketSport => false,
         }
     }
+}
+
+/**
+ * Where an activity took place.
+ *
+ * A detail rather than separate kinds, so every kind can be either without
+ * doubling the enum. Indoor distances are often machine estimates (a
+ * treadmill, a trainer, an erg), which records may treat differently later.
+ */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Environment {
+    /** Treadmill, trainer, erg, pool, gym, studio. */
+    Indoor,
+    /** Road, trail, open water, field. */
+    Outdoor,
 }
 
 /**
@@ -81,6 +152,14 @@ impl ActivityKind {
 pub struct ActivityDetails {
     /** A title, such as "Morning long run". */
     pub title: Option<Name>,
+    /** Indoor or outdoor, if known. */
+    pub environment: Option<Environment>,
+    /**
+     * The logged workout this activity summarizes. Only for
+     * [`ActivityKind::StrengthTraining`], so a watch's heart rate and energy
+     * attach to the session without recording the sets twice.
+     */
+    pub linked_session: Option<SessionId>,
     /** Time spent moving, excluding stops. At most the elapsed time. */
     pub moving: Option<ElapsedTime>,
     /** Distance covered. Only for kinds that track distance. */
@@ -190,6 +269,9 @@ fn check(
     if details.distance.is_some() && !kind.tracks_distance() {
         return Err(ActivityError::DistanceNotTracked(kind));
     }
+    if details.linked_session.is_some() && kind != ActivityKind::StrengthTraining {
+        return Err(ActivityError::SessionLinkNotAllowed(kind));
+    }
     if details.moving.is_some_and(|moving| moving > elapsed) {
         return Err(ActivityError::MovingExceedsElapsed);
     }
@@ -264,6 +346,47 @@ mod tests {
             activity(ActivityKind::Ride, details),
             Err(ActivityError::MaxHeartRateBelowAverage)
         );
+    }
+
+    #[test]
+    fn a_treadmill_run_is_an_indoor_run_with_distance() {
+        let details = ActivityDetails {
+            environment: Some(Environment::Indoor),
+            distance: Some(Distance::from_millimetres(5_000_000).unwrap()),
+            ..ActivityDetails::default()
+        };
+        let run = activity(ActivityKind::Run, details).unwrap();
+        assert_eq!(run.details().environment, Some(Environment::Indoor));
+    }
+
+    #[test]
+    fn strength_training_links_to_its_session() {
+        let session = SessionId::from_uuid(Uuid::from_u128(7));
+        let details = ActivityDetails {
+            linked_session: Some(session),
+            average_heart_rate: Some(HeartRate::from_bpm(118).unwrap()),
+            ..ActivityDetails::default()
+        };
+        let lift = activity(ActivityKind::StrengthTraining, details).unwrap();
+        assert_eq!(lift.details().linked_session, Some(session));
+    }
+
+    #[test]
+    fn only_strength_training_can_link_a_session() {
+        let details = ActivityDetails {
+            linked_session: Some(SessionId::from_uuid(Uuid::from_u128(7))),
+            ..ActivityDetails::default()
+        };
+        assert_eq!(
+            activity(ActivityKind::Run, details),
+            Err(ActivityError::SessionLinkNotAllowed(ActivityKind::Run))
+        );
+    }
+
+    #[test]
+    fn strength_training_has_no_distance() {
+        assert!(!ActivityKind::StrengthTraining.tracks_distance());
+        assert!(ActivityKind::Paddle.tracks_distance());
     }
 
     #[test]

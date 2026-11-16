@@ -57,7 +57,7 @@ mod units;
  */
 pub const ALGORITHM_VERSION: u32 = 1;
 
-pub use activity::{Activity, ActivityDetails, ActivityError, ActivityKind};
+pub use activity::{Activity, ActivityDetails, ActivityError, ActivityKind, Environment};
 pub use effort::{Effort, EffortError, PerceivedEffort, Rir, Rpe};
 pub use exercise::{Exercise, TrackingMode};
 pub use health::{BodyWeight, HealthError, HeartRate, Vo2Max};
@@ -68,7 +68,9 @@ pub use profile::{
     BirthYear, DistanceUnit, Profile, ProfileError, ReferencePopulation, UnitPreferences,
 };
 pub use provenance::{ImportFormat, Source};
-pub use records::{Quantity, Record, RecordKind, RecordSource, StandardDistance, Subject};
+pub use records::{
+    Quantity, Record, RecordError, RecordKind, RecordSource, StandardDistance, Subject,
+};
 pub use session::{Session, SessionError, SessionExercise};
 pub use set::{LoggedSet, SetMetrics, SetType};
 pub use text::{Name, Note, TextError, UnitLabel};
