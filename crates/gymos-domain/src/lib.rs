@@ -14,3 +14,30 @@
 //!   database and archive boundaries own their own representations.
 //! - **Dependencies:** `std` and small pure crates only. Never `rusqlite`,
 //!   `tauri` or anything that touches the OS.
+//!
+//! ## Model at a glance
+//!
+//! ```text
+//! Session ──< SessionExercise ──< LoggedSet
+//!   │             │                  ├─ SetType
+//!   │             └─ ExerciseId      ├─ SetMetrics (one variant per TrackingMode)
+//!   └─ Timestamp (UTC + offset)      └─ Effort (RPE | RIR)
+//! ```
+
+mod effort;
+mod exercise;
+mod ids;
+mod session;
+mod set;
+mod text;
+mod time;
+mod units;
+
+pub use effort::{Effort, EffortError, Rir, Rpe};
+pub use exercise::{Exercise, TrackingMode};
+pub use ids::{ExerciseId, SessionId, SetId, TemplateId};
+pub use session::{Session, SessionError, SessionExercise};
+pub use set::{LoggedSet, SetMetrics, SetType};
+pub use text::{Name, Note, TextError};
+pub use time::{TimeError, Timestamp, UtcOffset};
+pub use units::{Distance, DurationSecs, Load, Mass, Reps, UnitError, WeightUnit};

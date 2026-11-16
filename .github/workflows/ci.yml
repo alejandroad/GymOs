@@ -72,9 +72,7 @@ jobs:
         with:
           tool: cargo-nextest@0.9.152
       - name: nextest
-        # --no-tests=pass: the crates are still empty. Remove it with the
-        # first test so an accidentally empty run fails.
-        run: cargo nextest run --workspace --all-features --locked --no-tests=pass
+        run: cargo nextest run --workspace --all-features --locked
       - name: doctests
         run: cargo test --workspace --all-features --locked --doc
 
