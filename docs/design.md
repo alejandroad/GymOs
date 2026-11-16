@@ -32,6 +32,8 @@
 | DD-10 | Workflow | Trunk-based on `main`; strict small-commit rules |
 | DD-11 | CI and security | GitHub Actions on Windows and macOS; `clippy`, `rustfmt`, `cargo-deny`; Tauri hardening |
 | DD-12 | Repo reset | Tag the TS/Node spike, clear it in commits, keep history |
+| DD-13 | Overload verdicts | Verdict + signal list (bool derived); exact integer e1RM; `LoadStep` for double progression; deloads never a baseline |
+| DD-14 | Profile and records | Stats page is a view; measurements are time series; custom metrics; one `Record` type: open subjects × closed kinds |
 
 ---
 
@@ -183,6 +185,103 @@
 - ADR 0001 was marked **Superseded**, then removed along with `docs/HANDOFF.md` in `368e165`. Both remain in git history. The product definition (handoff §1 and §3) now lives in [`docs/product.md`](product.md).
 - Retire `dev`.
 
+### DD-13 · Progressive overload verdicts
+**Refines** `product.md` §3.3. The product rules stay the same; this decision fixes how they are computed and closes three gaps found while researching them.
+
+**Shape: a verdict plus a list of signals, not a boolean.**
+- Each exercise in a session gets an `ExerciseVerdict`: one `Verdict` (`Progressed | Matched | Regressed | InsufficientData | Deload`), **every** `Signal` that fired (positive and negative, strongest first) and the `algorithm_version`.
+- Each signal carries its before and after values, so the UI renders *"+1 rep at 100 kg on set 2 (8→9)"* without recomputing anything.
+- The yes/no answer is derived: `ExerciseVerdict::is_progressive_overload()` is true exactly when the verdict is `Progressed`. A stored boolean alone would lose first sessions, deloads, matched sessions and mixed results.
+
+**Verdict rules, evaluated in order:**
+1. The session is marked as a deload → `Deload` (signals are still listed).
+2. No baseline, or no comparable sets → `InsufficientData`.
+3. Any positive signal → `Progressed` ("any one counts", §3.3).
+4. Otherwise, any negative signal → `Regressed`.
+5. Otherwise → `Matched`.
+
+**Signals** (`WeightReps` first; other tracking modes follow the same pattern with fewer signals):
+
+| Signal | Fires when |
+|---|---|
+| `E1rm` | the best set's estimated 1RM changed (Epley, RPE-adjusted via RIR = 10 − RPE) |
+| `RepsAtLoad` | a paired set did more or fewer reps at the same load |
+| `LoadAtReps` | a paired set used more or less load at the same reps |
+| `LoadStep` | the top working load increased **and** reps are still at or above the scheme's minimum (gap 1) |
+| `WorkingSets` | more or fewer counted sets at the same load × reps |
+| `VolumeLoad` | Σ load × reps over counted sets changed, without the e1RM dropping |
+| `Effort` | the same work at a lower or higher RPE |
+
+**Gaps closed:**
+- **Gap 1: double progression must read as progress.** Under double progression (the default scheme, §3.2), reaching the top of the rep range means adding load, and reps fall back to the bottom: 100 kg × 8 → 102.5 kg × 6. Every §3.3 signal reads that as a drop (e1RM −3%, volume down). The `LoadStep` signal makes the verdict scheme-aware. **Prerequisite:** model `ProgressionScheme { rep_range, increment }` per exercise or template before this signal ships.
+- **Gap 2: deloads are never a baseline.** "Last time" selection skips sessions marked as a deload. Otherwise the session after a deload "progresses" on every signal.
+- **Gap 3: set pairing is defined.** `TopSet`, `Working` and `Failure` sets are paired by order. `Drop` and `Backoff` sets are excluded from pairing but count toward volume. Warm-ups are excluded everywhere (`SetType::counts_by_default`).
+  - A `TopSet` is the heaviest planned set, so a top set pairs with the previous session's top set first. A session with no top set falls back to plain order.
+  - This keeps "top set 100 → 102.5 kg" comparing like with like, even when the number of working sets before it changes.
+
+**Arithmetic and edge rules:**
+- **Formula: Epley**, `e1RM = w × (1 + r/30)`, for algorithm version 1. Why Epley over Brzycki (`w × 36 / (37 − r)`):
+  - It's linear in reps and defined for every rep count. Brzycki has a pole at 37 reps.
+  - The two agree exactly at 10 reps and differ by at most about 4% between 2 and 12 reps (Epley is higher below 10, lower above). A verdict compares the same formula on both sides, so the choice rarely flips one.
+  - It's the formula lifters most often recognise, which helps the "every number explains itself" principle.
+
+  Switching formulas later is a new `ALGORITHM_VERSION`, recomputed locally (§3.5).
+- **A single rep is the 1RM.** Epley gives 1.033 × w at one rep, so a true single would beat itself. For `r = 1`, e1RM is `w`.
+- **Exact comparisons.** Epley is a ratio, so "did e1RM go up" is decided by cross-multiplying integer `Mass` values in `i128`: `w₁·k(r₁)` vs `w₂·k(r₂)`, where `k(r) = 30 + r`, and `k(1) = 30` for the single-rep rule. RPE adjustment uses half-reps to stay integral (`2·r_eff = 2r + 20 − rpe_half_points`). Floats are used only to display values such as "124.0 → 126.7 kg".
+- **e1RM above 12 reps is skipped.** The formulas lose accuracy past about 10–12 reps. The skip is recorded so the explanation stays honest, and reps and volume still apply.
+- **Cross-unit "same load".** 100 kg and 220.46 lb differ by about 1 g. For **pairing only**, loads within 0.5% count as the same load. This is a versioned threshold. Every other comparison stays exact.
+
+**Placement** (follows DD-03):
+- Pure rules in `gymos-domain/src/progression/` (`e1rm.rs`, `signals.rs`, `verdict.rs`) plus `ALGORITHM_VERSION`.
+- Baseline selection needs history, so it is an engine query (`gymos-engine/src/queries/last_time.rs`).
+
+**Testing:** the worked examples in the overload research spike (A–H, including double progression and mixed sessions) become golden files before the rule code exists (DD-09). Property tests cover the e1RM comparisons: they must be antisymmetric, and integer and float ordering must agree.
+
+### DD-14 · Profile, measurements, activities and records
+**Implements** `product.md` §3.5–3.6 in `gymos-domain`.
+
+**The stats and medals page is a view, not a struct.** It is an engine query that combines three sources:
+
+| Source | What it holds | Stored? |
+|---|---|---|
+| `Profile` | display name, `UnitPreferences`, optional `BirthYear` and `ReferencePopulation` | yes, one per device (D7) |
+| `Measurement` | time series: body weight, VO2 max, resting HR, custom metrics | yes |
+| `Record` | every PR across exercises, activities and measurements | derived, recomputable (§3.5) |
+
+The profile holds **no stats**:
+- "Current body weight" is the latest body-weight measurement, so it can't go stale. The history it keeps drives full-range charts (§1.2.2).
+- Bodyweight exercises resolve body weight *on the session date* with `body_weight_at` (§3.6).
+
+**Measurements.** `MeasurementValue` is an enum with one variant per kind (`BodyWeight`, `Vo2Max`, `RestingHeartRate`, `Custom`), the same pattern as `SetMetrics` (DD-08). Each kind knows which direction is better:
+- VO2 max: higher.
+- Resting HR: lower.
+- Body weight: **neither**. Up or down depends on the person's goal, so body weight gets a chart and no "best" record.
+
+**Custom metrics are the extension point.** A `CustomMetric { name, unit, better, decimals }` lets the athlete track anything (grip strength, vertical jump, waist size). Values are exact thousandths (`CustomValue`). Each metric automatically gets a chart and a best-value record.
+
+**Activities.** `Activity` is one struct with optional `ActivityDetails`, because activity kinds share almost every field. Fields stay private because rules tie them together:
+- distance only where the kind tracks one
+- moving time ≤ elapsed time
+- max HR ≥ average HR
+
+`ElapsedTime` allows up to 7 days for multi-day events, without loosening the 24 h cap on set durations.
+
+- **22 activity kinds,** grouped into endurance, gym/classes and sports. Each kind declares whether it tracks distance.
+- **Indoor vs outdoor is a detail, not a kind.** `Environment::{Indoor, Outdoor}` is an optional field. A treadmill run is a `Run` that took place `Indoor`, which avoids doubling the enum.
+- **Strength training never duplicates sets.** `ActivityKind::StrengthTraining` holds a summary (often a watch's HR and energy). It can link to the logged `Session` through `linked_session`, and only that kind may link.
+- **Activities carry no overload verdict.** Verdicts are derived data computed per strength exercise (DD-13). A linked strength activity's verdicts are its session's verdicts.
+
+**Records: one generic type, a closed set of kinds.** `Record { subject, kind, value, better, achieved_at, source, previous, algorithm_version }`.
+- **Subject is open:** any exercise, any activity kind, any measurement series (custom metrics included), or `Overall`. A new exercise or metric gets records with no code change.
+- **`RecordKind` is closed:** each kind is a rule with its own detector and explanation, and the compiler checks every rule handles every kind. A free-form `String` → `f64` map was rejected: it would lose exactness (D10), compile-time checking, and the "every number explains itself" output (§1.2.7).
+- **`Quantity`** is a typed value (`Mass`, `Reps`, `Elapsed`, `Distance`, `Count`, …). Comparison only ranks like with like (`compare` returns `None` across variants), and a tie never counts as a new record.
+
+**Provenance on every user record.** Sessions, measurements and activities carry `Source::Manual | Import { format, importer_version }` (data-model rule 4). A bad importer version's rows can then be found and re-imported.
+
+**Privacy.** Birth year and reference population are optional and local, and only select a labelled percentile table later (D8). A year, not a date, keeps less data.
+
+**Scope of this decision:** types only. The record detectors arrive with the PR engine, and the stats view with the engine's `profile_stats` query.
+
 ---
 
 ## 4. Target repository layout
@@ -222,6 +321,10 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 | Phone app (Tauri mobile vs UniFFI + native) | Final milestone |
 | Leptos UI | Possible v2 only |
 | OWASP ASVS pass | Once real features exist |
+| Overload signals for bodyweight modes (DD-13) | After the body-weight measurement model |
+| Weight-dependent 1RM formula as a new `ALGORITHM_VERSION` | Only if peer-reviewed evidence holds up |
+| Milestones and achievements beyond records (DD-14) | After M1, checked against the no-dark-patterns principle (§1.2.6) |
+| Per-exercise unit override (D10) | With the exercise catalog |
 
 ## 6. Open questions (decide at scaffold or schema time)
 
@@ -230,3 +333,5 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 3. **UI libraries:** component kit (shadcn/ui?) and data fetching over IPC (TanStack Query?).
 4. **Command model:** keep the handoff's command + outbox write model in the engine from day one, or add the outbox with sync.
 5. **Timeline:** re-plan M1 after the scaffold, based on actual Rust velocity.
+6. **Session-level overload boolean (DD-13):** the spec only gives counts ("4 of 6 exercises progressed"). If a single session yes/no is wanted, define it explicitly, for example "at least one exercise progressed and none regressed". This is a product decision, not something the engine infers.
+7. **Indoor vs outdoor records (DD-14):** should a treadmill 5 km and a road 5 km share one "fastest 5 km" record? Indoor distances are machine estimates. Leaning: separate records when the environment is known. Decide with the record detectors.
