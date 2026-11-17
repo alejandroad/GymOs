@@ -15,7 +15,7 @@ use core::cmp::Ordering;
 
 use super::compare::{compare_exact_or_tolerant, compare_loads};
 use super::e1rm::E1rm;
-use super::pairing::{is_pairable, pair_sets};
+use super::pairing::{Pairing, is_pairable, pair_sets};
 use super::scheme::ProgressionScheme;
 use crate::effort::Effort;
 use crate::set::SetType;
@@ -132,7 +132,9 @@ pub enum Signal {
     },
     /**
      * Σ load × reps over counted sets changed. Up only when the e1RM did
-     * not drop, so piling on junk volume doesn't read as progress.
+     * not drop, so piling on junk volume doesn't read as progress. If only
+     * one side has an e1RM (the other is above the rep cap), a drop can't be
+     * ruled out, so there is no `Up`. `Down` is always listed.
      */
     VolumeLoad {
         /** Which way the volume moved. */
@@ -218,9 +220,17 @@ pub(crate) fn detect_weight_reps(
     }
 
     let mut detection = Detection::default();
-    let e1rm = compare_e1rm(&baseline, &current);
-    match e1rm {
-        Some((before, after, ordering)) => {
+    let (before, after) = (best_e1rm(&baseline), best_e1rm(&current));
+    /*
+     * Volume may only rise as progress when the e1RM is known not to have
+     * dropped. With both sides above the rep cap, e1RM says nothing either
+     * way (example K). With only one side above it, a drop can't be ruled
+     * out, so extra volume is not progress.
+     */
+    let volume_up_allowed = match (before, after) {
+        (Some(before), Some(after)) => {
+            let same_unit = before.load().unit() == after.load().unit();
+            let ordering = compare_exact_or_tolerant(after.scaled(), before.scaled(), same_unit);
             if let Some(direction) = Direction::of(ordering) {
                 detection.signals.push(Signal::E1rm {
                     direction,
@@ -228,10 +238,17 @@ pub(crate) fn detect_weight_reps(
                     after,
                 });
             }
+            ordering != Ordering::Less
         }
-        None => detection.skipped.push(Skipped::E1rmAboveRepCap),
-    }
-    let e1rm_dropped = matches!(e1rm, Some((_, _, Ordering::Less)));
+        (None, None) => {
+            detection.skipped.push(Skipped::E1rmAboveRepCap);
+            true
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            detection.skipped.push(Skipped::E1rmAboveRepCap);
+            false
+        }
+    };
 
     detection
         .signals
@@ -241,7 +258,7 @@ pub(crate) fn detect_weight_reps(
         .extend(paired_signals(&baseline, &current));
     detection
         .signals
-        .extend(volume_load(&baseline, &current, e1rm_dropped));
+        .extend(volume_load(&baseline, &current, volume_up_allowed));
     detection.signals.sort_by_key(kind_rank);
     detection
 }
@@ -263,18 +280,6 @@ fn best_e1rm(sets: &[WeightRepsSet]) -> Option<E1rm> {
     sets.iter()
         .filter_map(|s| E1rm::of_set(s.load, s.reps, s.effort))
         .max_by(|a, b| a.cmp_exact(*b))
-}
-
-/** `(before, after, after vs before)`, or `None` if either side has no estimate. */
-fn compare_e1rm(
-    baseline: &[WeightRepsSet],
-    current: &[WeightRepsSet],
-) -> Option<(E1rm, E1rm, Ordering)> {
-    let before = best_e1rm(baseline)?;
-    let after = best_e1rm(current)?;
-    let same_unit = before.load().unit() == after.load().unit();
-    let ordering = compare_exact_or_tolerant(after.scaled(), before.scaled(), same_unit);
-    Some((before, after, ordering))
 }
 
 fn top_pairable_load(sets: &[WeightRepsSet]) -> Option<Load> {
@@ -366,7 +371,10 @@ fn paired_signals(baseline: &[WeightRepsSet], current: &[WeightRepsSet]) -> Vec<
     }
 
     /* At least one pair, or "every pair identical" would be vacuously true. */
-    if every_pair_identical && !pairing.pairs.is_empty() {
+    if every_pair_identical
+        && !pairing.pairs.is_empty()
+        && extra_sets_repeat_paired_work(baseline, current, &pairing)
+    {
         let count = pairing.current_pairable.cmp(&pairing.baseline_pairable);
         if let Some(direction) = Direction::of(count) {
             signals.push(Signal::WorkingSets {
@@ -377,6 +385,48 @@ fn paired_signals(baseline: &[WeightRepsSet], current: &[WeightRepsSet]) -> Vec<
         }
     }
     signals
+}
+
+/**
+ * Whether every unpaired pairable set on the longer side repeats work from
+ * the other side: the same reps at the same load as one of its paired sets.
+ * `WorkingSets` means "more or fewer sets at the same load × reps" (product
+ * §3.3), so an extra set at another load or rep count is not one.
+ */
+fn extra_sets_repeat_paired_work(
+    baseline: &[WeightRepsSet],
+    current: &[WeightRepsSet],
+    pairing: &Pairing,
+) -> bool {
+    let (longer, shorter, longer_paired, shorter_paired): (_, _, Vec<usize>, Vec<usize>) =
+        if pairing.current_pairable >= pairing.baseline_pairable {
+            (
+                current,
+                baseline,
+                pairing.pairs.iter().map(|p| p.current).collect(),
+                pairing.pairs.iter().map(|p| p.baseline).collect(),
+            )
+        } else {
+            (
+                baseline,
+                current,
+                pairing.pairs.iter().map(|p| p.baseline).collect(),
+                pairing.pairs.iter().map(|p| p.current).collect(),
+            )
+        };
+    let same_work = |a: &WeightRepsSet, b: &WeightRepsSet| {
+        a.reps == b.reps && compare_loads(a.load, b.load) == Ordering::Equal
+    };
+    longer
+        .iter()
+        .enumerate()
+        .filter(|&(i, s)| is_pairable(s.set_type) && !longer_paired.contains(&i))
+        .all(|(_, extra)| {
+            shorter_paired
+                .iter()
+                .filter_map(|&i| shorter.get(i))
+                .any(|paired| same_work(extra, paired))
+        })
 }
 
 fn volume(sets: &[WeightRepsSet]) -> Volume {
@@ -390,14 +440,14 @@ fn volume(sets: &[WeightRepsSet]) -> Volume {
 fn volume_load(
     baseline: &[WeightRepsSet],
     current: &[WeightRepsSet],
-    e1rm_dropped: bool,
+    up_allowed: bool,
 ) -> Option<Signal> {
     let (before, after) = (volume(baseline), volume(current));
     let mut units = baseline.iter().chain(current).map(|s| s.load.unit());
     let first = units.next()?;
     let same_unit = units.all(|unit| unit == first);
     let direction = Direction::of(compare_exact_or_tolerant(after.0, before.0, same_unit))?;
-    (direction == Direction::Down || !e1rm_dropped).then_some(Signal::VolumeLoad {
+    (direction == Direction::Down || up_allowed).then_some(Signal::VolumeLoad {
         direction,
         before,
         after,
@@ -468,6 +518,44 @@ mod tests {
         let current = [working(10_000, 8), working(10_000, 7), working(10_000, 8)];
         let d = detect_weight_reps(&baseline, &current, None);
         assert!(!kinds(&d).contains(&4));
+    }
+
+    #[test]
+    fn extra_sets_must_repeat_last_times_load_and_reps() {
+        let baseline = [working(10_000, 8); 3];
+        /* An extra 0 kg × 1 set is not "one more set at 100 kg × 8". */
+        let mut current = vec![working(10_000, 8); 3];
+        current.push(working(0, 1));
+        assert_eq!(
+            detect_weight_reps(&baseline, &current, None),
+            Detection::default()
+        );
+        /* An extra set at a micro-plate heavier load isn't either. */
+        current[3] = working(10_025, 8);
+        assert!(!kinds(&detect_weight_reps(&baseline, &current, None)).contains(&4));
+        /* One more identical set is. */
+        current[3] = working(10_000, 8);
+        assert!(kinds(&detect_weight_reps(&baseline, &current, None)).contains(&4));
+        /* The same holds for a dropped set: the missing one must match too. */
+        let mut longer = vec![working(10_000, 8); 3];
+        longer.push(working(6_000, 12));
+        let d = detect_weight_reps(&longer, &baseline, None);
+        assert!(!kinds(&d).contains(&4));
+    }
+
+    #[test]
+    fn volume_is_not_progress_when_only_one_side_has_an_e1rm() {
+        let baseline = [working(10_000, 8); 3];
+        let current = [working(6_000, 15); 3];
+        let d = detect_weight_reps(&baseline, &current, None);
+        /* 2400 → 2700 kg·reps, but the heavy e1RM may well have dropped. */
+        assert_eq!(d.signals, []);
+        assert_eq!(d.skipped, [Skipped::E1rmAboveRepCap]);
+        /* A volume drop is still listed. */
+        let current = [working(6_000, 15)];
+        let d = detect_weight_reps(&baseline, &current, None);
+        assert_eq!(kinds(&d), [5]);
+        assert_eq!(d.signals[0].direction(), Direction::Down);
     }
 
     #[test]

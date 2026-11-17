@@ -191,6 +191,17 @@ fn assert_signals(
 
 const VOLUME: Option<Signal> = None;
 
+/**
+ * Checks everything in the verdict except the signals: the outcome, the
+ * skipped rules and the algorithm version.
+ */
+fn assert_outcome(v: &ExerciseVerdict, verdict: Verdict, skipped: &[Skipped]) {
+    assert_eq!(
+        (v.verdict, v.skipped.as_slice(), v.algorithm_version),
+        (verdict, skipped, ALGORITHM_VERSION),
+    );
+}
+
 /** `kg_reps(1232, 50)` is 1232.50 kg·reps, exactly, in nanogram-reps. */
 fn kg_reps(whole: i128, hundredths: i128) -> i128 {
     (whole * 100 + hundredths) * 10_000_000_000
@@ -211,7 +222,7 @@ fn a_one_more_rep_progresses() {
     let (baseline, current) = example_a();
     let v = compare(&baseline, &current);
     let k = kg(100, 0);
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -226,8 +237,6 @@ fn a_one_more_rep_progresses() {
         ],
         Some((Up, kg_reps(2300, 0), kg_reps(2400, 0))),
     );
-    assert_eq!(v.skipped, []);
-    assert_eq!(v.algorithm_version, ALGORITHM_VERSION);
 }
 
 fn example_b() -> (Vec<Spec>, Vec<Spec>) {
@@ -240,7 +249,7 @@ fn b_double_progression_load_step_progresses() {
     let range = RepRange::new(reps(6), reps(8)).unwrap();
     let scheme = ProgressionScheme::new(range, kg(2, 50)).unwrap();
     let v = verdict(Some(&baseline), &current, false, Some(&scheme));
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -259,14 +268,13 @@ fn b_double_progression_load_step_progresses() {
         ],
         Some((Down, kg_reps(2400, 0), kg_reps(1845, 0))),
     );
-    assert_eq!(v.skipped, []);
 }
 
 #[test]
 fn b_prime_the_same_session_without_a_scheme_regresses() {
     let (baseline, current) = example_b();
     let v = compare(&baseline, &current);
-    assert_eq!(v.verdict, Verdict::Regressed);
+    assert_outcome(&v, Verdict::Regressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -289,7 +297,7 @@ fn c_the_same_work_at_a_lower_rpe_progresses() {
         &[(Working, k, 8, Some(rpe(18)))],
         &[(Working, k, 8, Some(rpe(16)))],
     );
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -314,15 +322,15 @@ fn c_the_same_work_at_a_lower_rpe_progresses() {
 fn d_the_same_session_matches() {
     let sets = vec![w(kg(100, 0), 8); 3];
     let v = compare(&sets, &sets);
-    assert_eq!(v.verdict, Verdict::Matched);
-    assert_eq!((v.signals, v.skipped), (vec![], vec![]));
+    assert_outcome(&v, Verdict::Matched, &[]);
+    assert_eq!(v.signals, []);
 }
 
 #[test]
 fn e_fewer_reps_regresses() {
     let k = kg(100, 0);
     let v = compare(&[w(k, 8); 3], &[w(k, 8), w(k, 7), w(k, 6)]);
-    assert_eq!(v.verdict, Verdict::Regressed);
+    assert_outcome(&v, Verdict::Regressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -337,15 +345,15 @@ fn e_fewer_reps_regresses() {
 #[test]
 fn f_a_first_session_is_insufficient_data() {
     let v = verdict(None, &[w(kg(100, 0), 8)], false, None);
-    assert_eq!(v.verdict, Verdict::InsufficientData);
-    assert_eq!((v.signals, v.skipped), (vec![], vec![]));
+    assert_outcome(&v, Verdict::InsufficientData, &[]);
+    assert_eq!(v.signals, []);
 }
 
 #[test]
 fn g_a_deload_is_never_a_regression_but_still_explains_itself() {
     let (before, after) = (kg(100, 0), kg(80, 0));
     let v = verdict(Some(&[w(before, 8); 3]), &[w(after, 8); 3], true, None);
-    assert_eq!(v.verdict, Verdict::Deload);
+    assert_outcome(&v, Verdict::Deload, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -368,7 +376,7 @@ fn g_a_deload_is_never_a_regression_but_still_explains_itself() {
 fn h_a_mixed_session_progresses_and_lists_the_drop() {
     let k = kg(100, 0);
     let v = compare(&[w(k, 8); 3], &[w(k, 9), w(k, 8), w(k, 6)]);
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -390,7 +398,7 @@ fn h_a_mixed_session_progresses_and_lists_the_drop() {
 fn i_an_extra_identical_set_progresses() {
     let k = kg(100, 0);
     let v = compare(&[w(k, 8); 3], &[w(k, 8); 4]);
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -408,21 +416,20 @@ fn i_an_extra_identical_set_progresses() {
 #[test]
 fn j_switching_units_at_the_same_load_matches() {
     let v = compare(&[w(kg(100, 0), 8)], &[w(lb(220, 46), 8)]);
-    assert_eq!(v.verdict, Verdict::Matched);
-    assert_eq!((v.signals, v.skipped), (vec![], vec![]));
+    assert_outcome(&v, Verdict::Matched, &[]);
+    assert_eq!(v.signals, []);
 }
 
 #[test]
 fn k_high_rep_sets_skip_e1rm_but_still_progress() {
     let k = kg(60, 0);
     let v = compare(&[w(k, 15), w(k, 15)], &[w(k, 16), w(k, 15)]);
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[Skipped::E1rmAboveRepCap]);
     assert_signals(
         &v.signals,
         &[Some(reps_at_load(Up, 0, k, 15, 16)), VOLUME],
         Some((Up, kg_reps(1800, 0), kg_reps(1860, 0))),
     );
-    assert_eq!(v.skipped, [Skipped::E1rmAboveRepCap]);
 }
 
 #[test]
@@ -432,7 +439,7 @@ fn l_top_sets_pair_with_top_sets_and_backoffs_only_add_volume() {
         &[(TopSet, kg(100, 0), 5, None), backoff],
         &[(TopSet, kg(102, 50), 5, None), backoff],
     );
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[
@@ -504,12 +511,23 @@ fn drop_sets_add_volume_but_are_never_paired() {
         &[w(k, 8), (Drop, kg(70, 0), 12, None)],
     );
     /* No RepsAtLoad for the drop set: only the volume moved. */
-    assert_eq!(v.verdict, Verdict::Progressed);
+    assert_outcome(&v, Verdict::Progressed, &[]);
     assert_signals(
         &v.signals,
         &[VOLUME],
         Some((Up, kg_reps(1500, 0), kg_reps(1640, 0))),
     );
+}
+
+#[test]
+fn an_extra_set_at_another_load_is_not_another_working_set() {
+    let k = kg(100, 0);
+    let mut current = vec![w(k, 8); 3];
+    current.push(w(kg(0, 0), 1));
+    let v = compare(&[w(k, 8); 3], &current);
+    /* Same e1RM, same volume, and the extra set repeats no work. */
+    assert_outcome(&v, Verdict::Matched, &[]);
+    assert_eq!(v.signals, []);
 }
 
 fn all_verdicts() -> Vec<ExerciseVerdict> {

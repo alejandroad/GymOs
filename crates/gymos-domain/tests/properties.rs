@@ -66,12 +66,13 @@ proptest! {
     #[test]
     fn one_more_rep_at_the_same_load_never_lowers_the_e1rm(
         load in load(),
-        reps in 1_u16..=999,
+        /* 11 → 12 is the last step where both sides can have an estimate. */
+        reps in 1_u16..=11,
         effort in effort(),
     ) {
         let fewer = E1rm::of_set(load, Reps::new(reps).unwrap(), effort);
         let more = E1rm::of_set(load, Reps::new(reps + 1).unwrap(), effort);
-        /* Past the rep cap there is no estimate to compare. */
+        /* With effort logged, the cap can still remove an estimate. */
         if let (Some(fewer), Some(more)) = (fewer, more) {
             prop_assert_ne!(more.cmp_exact(fewer), Ordering::Less);
         }
