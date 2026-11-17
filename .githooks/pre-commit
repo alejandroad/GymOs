@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Local gate before a commit is made, mirroring the required CI checks
+# (.github/workflows/ci.yml: lint, test, build) so breakage is caught before
+# it's pushed rather than after. Install with:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+step() { printf '\n==> %s\n' "$1"; }
+
+step "cargo fmt --check"
+cargo fmt --all --check
+
+step "cargo clippy -D warnings"
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+step "cargo test"
+cargo test --workspace --all-features --locked
+
+step "cargo build"
+cargo build --workspace --all-features --locked
+
+echo -e "\nAll checks passed."

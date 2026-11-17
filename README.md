@@ -17,6 +17,20 @@ See [`docs/product.md`](docs/product.md) for what GymOs does and
 The previous TypeScript/Node local-first spike is preserved at the
 [`archive/ts-node-spike`](https://github.com/alejandroad/GymOs/tree/archive/ts-node-spike) tag.
 
+## Development
+
+One-time per clone, enable the tracked git hooks:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+This runs [`.githooks/pre-commit`](.githooks/pre-commit) before every commit:
+`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` and
+`cargo build`, mirroring the required checks in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) so breakage is caught
+locally instead of in CI.
+
 ## Docs
 
 - [`docs/product.md`](docs/product.md): product spec: principles, core loop and engine rules.
