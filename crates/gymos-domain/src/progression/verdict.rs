@@ -272,7 +272,7 @@ mod tests {
 
     use super::*;
     use crate::exercise::Exercise;
-    use crate::ids::SetId;
+    use crate::ids::{SessionExerciseId, SetId};
     use crate::set::{LoggedSet, SetType};
     use crate::text::Name;
     use crate::units::{DurationSecs, Load, Reps, WeightUnit};
@@ -282,11 +282,13 @@ mod tests {
             id: ExerciseId::from_uuid(Uuid::from_u128(id)),
             name: Name::new("Lift").unwrap(),
             mode,
+            scheme: None,
         }
     }
 
     fn entry(exercise: &Exercise, set_type: SetType) -> SessionExercise {
-        let mut entry = SessionExercise::new(exercise);
+        let mut entry =
+            SessionExercise::new(SessionExerciseId::from_uuid(Uuid::from_u128(8)), exercise);
         let metrics = if exercise.mode == TrackingMode::Duration {
             SetMetrics::Duration {
                 duration: DurationSecs::new(60).unwrap(),

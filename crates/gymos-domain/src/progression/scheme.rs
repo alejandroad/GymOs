@@ -4,8 +4,8 @@
  *
  * The overload rules need the scheme for one signal: `LoadStep` (DD-13
  * gap 1). Under double progression, 100 kg × 8 → 102.5 kg × 6 is progress,
- * even though the e1RM and the volume both fall. Where schemes are stored
- * (per exercise or per template) is decided with the engine.
+ * even though the e1RM and the volume both fall. Schemes are stored per
+ * exercise ([`Exercise::scheme`](crate::Exercise::scheme), DD-15).
  */
 
 use thiserror::Error;

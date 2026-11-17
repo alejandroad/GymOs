@@ -13,5 +13,30 @@
  *   The engine sequences load, decide and persist inside one transaction.
  * - **Synchronous.** No async runtime here; the shell decides how to keep
  *   the UI responsive.
- * - **Dependencies:** `gymos-domain` only. Never SQLite, never Tauri.
+ * - **Dependencies:** `gymos-domain` and `thiserror` only. Never SQLite,
+ *   never Tauri.
+ *
+ * ## Shape
+ *
+ * ```text
+ * GymOs<P: Ports>
+ *   execute(Command)            -> CommandOutcome   one store.write each
+ *   last_time(session, entry)   -> Option<Baseline> one store.read
+ *   session_verdicts(session)   -> SessionVerdicts  one store.read
+ * ```
  */
+
+mod command;
+mod commands;
+mod error;
+mod gymos;
+mod load;
+mod ports;
+mod queries;
+
+pub use command::{Command, CommandId, CommandKind, CommandOutcome};
+pub use commands::{AddExercise, CreateExercise, FinishSession, LogSet, SetDeload, StartSession};
+pub use error::{DomainError, EngineError, Missing, RepoError};
+pub use gymos::GymOs;
+pub use ports::{Clock, IdGen, Ports, ReadTx, SessionHeader, Store, WriteTx};
+pub use queries::{Baseline, BaselineRule, EntryOutcome, EntryVerdict, SessionVerdicts};

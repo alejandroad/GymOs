@@ -21,8 +21,9 @@
  * ```text
  * Session ──< SessionExercise ──< LoggedSet
  *   │             │                  ├─ SetType
- *   │             └─ ExerciseId      ├─ SetMetrics (one variant per TrackingMode)
- *   └─ Timestamp (UTC + offset)      └─ Effort (RPE | RIR)
+ *   │             ├─ ExerciseId      ├─ SetMetrics (one variant per TrackingMode)
+ *   │             └─ its own ID      └─ Effort (RPE | RIR)
+ *   └─ Timestamp (UTC + offset)
  *
  * Measurement   time series: body weight, VO2 max, resting HR, custom metrics
  * Activity      runs, rides, classes: kind + elapsed time + checked details
@@ -65,7 +66,10 @@ pub use activity::{Activity, ActivityDetails, ActivityError, ActivityKind, Envir
 pub use effort::{Effort, EffortError, PerceivedEffort, Rir, Rpe};
 pub use exercise::{Exercise, TrackingMode};
 pub use health::{BodyWeight, HealthError, HeartRate, Vo2Max};
-pub use ids::{ActivityId, ExerciseId, MeasurementId, MetricId, SessionId, SetId, TemplateId};
+pub use ids::{
+    ActivityId, ExerciseId, MeasurementId, MetricId, SessionExerciseId, SessionId, SetId,
+    TemplateId,
+};
 pub use measurement::{Measurement, MeasurementKind, MeasurementValue, body_weight_at};
 pub use metric::{Better, CustomMetric, CustomValue, MetricError};
 pub use profile::{
@@ -83,3 +87,9 @@ pub use units::{
     Distance, DurationSecs, ElapsedTime, ElevationGain, Energy, Load, Mass, Reps, UnitError,
     WeightUnit,
 };
+/**
+ * The UUID type every ID wraps, re-exported so that callers which generate
+ * IDs (the engine's `IdGen` port, test fakes) need no direct `uuid`
+ * dependency.
+ */
+pub use uuid::Uuid;
