@@ -11,9 +11,14 @@ use crate::load;
 use crate::ports::{IdGen, Ports, WriteTx};
 
 /**
- * Appends a set to one entry of a session. Finished sessions accept sets
- * too, because past sessions stay editable (product §3.5). The set's ID is
- * returned in [`CommandOutcome::SetLogged`].
+ * Appends a new set to one entry of a session. Finished sessions accept
+ * sets too, because past sessions stay editable (product §3.5). The set's
+ * ID is returned in [`CommandOutcome::SetLogged`].
+ *
+ * This only adds. It is not an update: logging the same values again adds
+ * a second set (under a new [`CommandId`]), and an existing set is never
+ * changed. Editing and deleting sets are separate commands, planned with
+ * records.
  */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogSet {

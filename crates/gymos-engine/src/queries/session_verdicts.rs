@@ -2,10 +2,30 @@
  * Session verdicts: one overload verdict per entry, plus the session's
  * counts (DD-13, DD-15).
  *
- * Verdicts are computed on read and never stored (D-6). An edit, a deload
- * toggle, a scheme change or a new `ALGORITHM_VERSION` shows up at once,
- * with nothing to invalidate. Each verdict uses the exercise's *current*
- * scheme (D-2).
+ * ## Why verdicts are computed on read (D-6)
+ *
+ * The point of a verdict is that the user can open any past workout, not
+ * just today's, and see whether it was productive: which exercises
+ * progressed, matched or regressed, and the signals that explain each one.
+ * That history view must always be right, so nothing is stored:
+ *
+ * - **Past workouts stay accurate.** Fixing a typo in an old set, logging a
+ *   forgotten set, marking a session as a deload afterwards, importing an
+ *   older session that slots in between two others, or changing an
+ *   exercise's scheme all change what "last time" was or how it is judged.
+ *   A stored verdict would be stale until something invalidated it; a
+ *   computed one is correct on the next read.
+ * - **A past workout's verdict is stable otherwise.** The baseline is always
+ *   an earlier session, so logging new sessions never changes how an old
+ *   one is judged.
+ * - **Rule upgrades reach the whole history.** A new `ALGORITHM_VERSION`
+ *   re-judges every past workout the next time it is opened, with no
+ *   migration, and each verdict carries the version it was computed with.
+ *
+ * The cost is a few lookups per entry, small for one user's history. Each
+ * verdict uses the exercise's *current* scheme (D-2). Records are the
+ * exception to compute-on-read (DD-14): they are materialized, because "best
+ * ever" needs the whole history.
  */
 
 use gymos_domain::progression::{

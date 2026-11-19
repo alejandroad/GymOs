@@ -340,7 +340,7 @@ Jaccard similarity for sessions without a template, and a baseline the user pick
 
 **A tracking mode can't change once sets exist** (as `exercise.rs` already says). No command changes a mode yet; when one is added it refuses the change with `EngineError::Conflict` (the variant arrives with that command). A domain `ModeMismatch` therefore means stored data is inconsistent, and it is reported as an error, never as a verdict.
 
-**Verdicts are computed on read, never stored.**
+**Verdicts are computed on read, never stored.** The user must be able to open any past workout and see whether it was productive, and that answer must stay right after edits, late deload marks, imports of older sessions, scheme changes and rule upgrades. A stored verdict would need invalidating on every one of those; a computed one is correct on the next read. Logging new sessions never changes an old session's verdict, because its baseline is always earlier.
 - The `session_verdicts` query loads the session and each entry's baseline, then calls `progression::exercise_verdict`. It returns one result per entry plus the `SessionVerdict` counts.
 - An entry whose mode has no rules yet gets its own "unsupported" result instead of failing the whole session.
 - Computing on read means an edit, a deload toggle, a scheme change or an `ALGORITHM_VERSION` bump shows up immediately, with no invalidation. Records (DD-14) are different: they are materialized and recomputable.

@@ -6,6 +6,19 @@
  * records the ID in the same transaction as the change, and a command that
  * was already applied returns [`CommandOutcome::AlreadyApplied`] without
  * changing anything. Importers and, later, sync share this one write path.
+ *
+ * ## Creating versus correcting
+ *
+ * The commands here only **add**: a set, an entry, a session, an exercise,
+ * or a session's end time and deload mark. None of them changes or removes
+ * something already logged; [`LogSet`] always appends a new set.
+ *
+ * Corrections (editing or deleting a set, removing an entry, deleting a
+ * session, renaming an exercise or changing its scheme) are planned as
+ * their own commands with the records PR. Verdicts need nothing from them,
+ * since they are computed on read, but records are materialized (DD-14), so
+ * every correction must also recompute the records it affects, in the same
+ * transaction.
  */
 
 use core::fmt;
@@ -66,7 +79,10 @@ pub enum CommandKind {
     StartSession(StartSession),
     /** Adds an exercise entry to a session. */
     AddExercise(AddExercise),
-    /** Logs a set into a session entry. */
+    /**
+     * Appends a new set to a session entry. It never changes an existing
+     * set; correcting one is a separate command, planned with records.
+     */
     LogSet(LogSet),
     /** Finishes a session, or corrects its end time. */
     FinishSession(FinishSession),
