@@ -1,6 +1,7 @@
 /*! Exercises and how they are tracked. */
 
 use crate::ids::ExerciseId;
+use crate::progression::ProgressionScheme;
 use crate::text::Name;
 
 /**
@@ -44,4 +45,11 @@ pub struct Exercise {
     pub name: Name,
     /** How this exercise's sets are measured. */
     pub mode: TrackingMode,
+    /**
+     * How this exercise progresses, if the user has chosen a scheme
+     * (DD-15). There is no default: without one, the `LoadStep` signal is
+     * not evaluated. Verdicts always read the current scheme, so changing it
+     * changes past verdicts too.
+     */
+    pub scheme: Option<ProgressionScheme>,
 }

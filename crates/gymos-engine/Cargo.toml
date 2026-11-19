@@ -10,3 +10,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+gymos-domain.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+gymos-testkit.workspace = true

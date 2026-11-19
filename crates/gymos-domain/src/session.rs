@@ -11,7 +11,7 @@
 use thiserror::Error;
 
 use crate::exercise::{Exercise, TrackingMode};
-use crate::ids::{ExerciseId, SessionId, TemplateId};
+use crate::ids::{ExerciseId, SessionExerciseId, SessionId, TemplateId};
 use crate::provenance::Source;
 use crate::set::LoggedSet;
 use crate::text::{Name, Note};
@@ -23,6 +23,9 @@ pub enum SessionError {
     /** The end time is before the start time. */
     #[error("a session cannot end before it starts")]
     EndsBeforeStart,
+    /** An entry with this ID is already in the session. */
+    #[error("entry {0} is already in this session")]
+    DuplicateEntry(SessionExerciseId),
     /** A set's measurements don't fit the exercise's tracking mode. */
     #[error("set is tracked as {found:?} but the exercise is tracked as {expected:?}")]
     ModeMismatch {
@@ -33,9 +36,15 @@ pub enum SessionError {
     },
 }
 
-/** One exercise as performed within a session, with its sets in order. */
+/**
+ * One exercise as performed within a session, with its sets in order.
+ *
+ * Each entry has its own [`SessionExerciseId`], because the same exercise
+ * may appear more than once in a session (DD-15).
+ */
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionExercise {
+    id: SessionExerciseId,
     exercise: ExerciseId,
     mode: TrackingMode,
     sets: Vec<LoggedSet>,
@@ -43,9 +52,13 @@ pub struct SessionExercise {
 }
 
 impl SessionExercise {
-    /** Starts an empty entry for `exercise`, capturing its tracking mode. */
-    pub fn new(exercise: &Exercise) -> Self {
+    /**
+     * Starts an empty entry for `exercise`, capturing its tracking mode.
+     * The ID comes from the caller; the domain never generates one.
+     */
+    pub fn new(id: SessionExerciseId, exercise: &Exercise) -> Self {
         Self {
+            id,
             exercise: exercise.id,
             mode: exercise.mode,
             sets: Vec::new(),
@@ -71,6 +84,11 @@ impl SessionExercise {
         }
         self.sets.push(set);
         Ok(())
+    }
+
+    /** Stable identity of this entry. */
+    pub const fn id(&self) -> SessionExerciseId {
+        self.id
     }
 
     /** The exercise performed. */
@@ -150,9 +168,34 @@ impl Session {
         Ok(())
     }
 
-    /** Appends an exercise. The same exercise may appear more than once. */
-    pub fn add_exercise(&mut self, exercise: SessionExercise) {
+    /**
+     * Appends an exercise. The same exercise may appear more than once;
+     * each entry is told apart by its [`SessionExerciseId`].
+     *
+     * # Errors
+     *
+     * [`SessionError::DuplicateEntry`] if an entry with the same ID is
+     * already in this session.
+     */
+    pub fn add_exercise(&mut self, exercise: SessionExercise) -> Result<(), SessionError> {
+        if self.entry(exercise.id()).is_some() {
+            return Err(SessionError::DuplicateEntry(exercise.id()));
+        }
         self.exercises.push(exercise);
+        Ok(())
+    }
+
+    /** The entry with this ID, if it is in this session. */
+    pub fn entry(&self, id: SessionExerciseId) -> Option<&SessionExercise> {
+        self.exercises.iter().find(|entry| entry.id() == id)
+    }
+
+    /**
+     * Mutable access to one entry, for logging sets. The entry still
+     * enforces its own rules.
+     */
+    pub fn entry_mut(&mut self, id: SessionExerciseId) -> Option<&mut SessionExercise> {
+        self.exercises.iter_mut().find(|entry| entry.id() == id)
     }
 
     /** Stable identity. */
@@ -253,7 +296,12 @@ mod tests {
             id: ExerciseId::from_uuid(Uuid::from_u128(1)),
             name: Name::new("Bench Press").unwrap(),
             mode: TrackingMode::WeightReps,
+            scheme: None,
         }
+    }
+
+    fn entry_id(n: u128) -> SessionExerciseId {
+        SessionExerciseId::from_uuid(Uuid::from_u128(n))
     }
 
     fn set(metrics: SetMetrics) -> LoggedSet {
@@ -272,7 +320,7 @@ mod tests {
 
     #[test]
     fn accepts_sets_matching_the_exercise_mode() {
-        let mut entry = SessionExercise::new(&bench());
+        let mut entry = SessionExercise::new(entry_id(10), &bench());
         let metrics = SetMetrics::WeightReps {
             load: Load::new(10_000, WeightUnit::Kilograms).unwrap(),
             reps: Reps::new(5).unwrap(),
@@ -283,7 +331,7 @@ mod tests {
 
     #[test]
     fn rejects_sets_from_another_mode() {
-        let mut entry = SessionExercise::new(&bench());
+        let mut entry = SessionExercise::new(entry_id(10), &bench());
         let plank = SetMetrics::Duration {
             duration: DurationSecs::new(60).unwrap(),
             load: None,
@@ -331,7 +379,9 @@ mod tests {
             at(0),
             Source::Manual,
         );
-        session.add_exercise(SessionExercise::new(&bench()));
+        session
+            .add_exercise(SessionExercise::new(entry_id(10), &bench()))
+            .unwrap();
         let metrics = SetMetrics::WeightReps {
             load: Load::new(6_000, WeightUnit::Kilograms).unwrap(),
             reps: Reps::new(8).unwrap(),
@@ -347,7 +397,9 @@ mod tests {
             at(0),
             Source::Manual,
         );
-        session.add_exercise(SessionExercise::new(&bench()));
+        session
+            .add_exercise(SessionExercise::new(entry_id(10), &bench()))
+            .unwrap();
         session.finish(at(5_000)).unwrap();
         session.finish(at(7_000)).unwrap();
         assert_eq!(session.ended_at(), Some(at(7_000)));
@@ -357,5 +409,50 @@ mod tests {
         };
         session.exercises_mut()[0].push_set(set(metrics)).unwrap();
         assert_eq!(session.exercises()[0].sets().len(), 1);
+    }
+
+    #[test]
+    fn finds_entries_by_id_even_for_repeated_exercises() {
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(0),
+            Source::Manual,
+        );
+        session
+            .add_exercise(SessionExercise::new(entry_id(10), &bench()))
+            .unwrap();
+        session
+            .add_exercise(SessionExercise::new(entry_id(11), &bench()))
+            .unwrap();
+        assert_eq!(session.entry(entry_id(11)).unwrap().id(), entry_id(11));
+        assert!(session.entry(entry_id(12)).is_none());
+        let metrics = SetMetrics::WeightReps {
+            load: Load::new(6_000, WeightUnit::Kilograms).unwrap(),
+            reps: Reps::new(8).unwrap(),
+        };
+        session
+            .entry_mut(entry_id(11))
+            .unwrap()
+            .push_set(set(metrics))
+            .unwrap();
+        assert_eq!(session.exercises()[0].sets().len(), 0);
+        assert_eq!(session.exercises()[1].sets().len(), 1);
+    }
+
+    #[test]
+    fn rejects_a_second_entry_with_the_same_id() {
+        let mut session = Session::start(
+            SessionId::from_uuid(Uuid::from_u128(3)),
+            at(0),
+            Source::Manual,
+        );
+        session
+            .add_exercise(SessionExercise::new(entry_id(10), &bench()))
+            .unwrap();
+        assert_eq!(
+            session.add_exercise(SessionExercise::new(entry_id(10), &bench())),
+            Err(SessionError::DuplicateEntry(entry_id(10)))
+        );
+        assert_eq!(session.exercises().len(), 1);
     }
 }

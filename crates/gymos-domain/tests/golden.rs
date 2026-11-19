@@ -18,7 +18,7 @@ use gymos_domain::progression::{
 };
 use gymos_domain::{
     ALGORITHM_VERSION, DurationSecs, Effort, Exercise, ExerciseId, Load, LoggedSet, Name, Reps,
-    Rpe, SessionExercise, SetId, SetMetrics, SetType, TrackingMode, WeightUnit,
+    Rpe, SessionExercise, SessionExerciseId, SetId, SetMetrics, SetType, TrackingMode, WeightUnit,
 };
 use uuid::Uuid;
 
@@ -50,7 +50,12 @@ fn bench() -> Exercise {
         id: ExerciseId::from_uuid(Uuid::from_u128(1)),
         name: Name::new("Bench Press").unwrap(),
         mode: TrackingMode::WeightReps,
+        scheme: None,
     }
+}
+
+fn entry_id() -> SessionExerciseId {
+    SessionExerciseId::from_uuid(Uuid::from_u128(2))
 }
 
 /** One logged set: type, load, reps and an optional effort. */
@@ -61,7 +66,7 @@ fn w(load: Load, n: u16) -> Spec {
 }
 
 fn entry(sets: &[Spec]) -> SessionExercise {
-    let mut entry = SessionExercise::new(&bench());
+    let mut entry = SessionExercise::new(entry_id(), &bench());
     for (i, &(set_type, load, n, effort)) in (0_u128..).zip(sets) {
         entry
             .push_set(LoggedSet {
@@ -462,8 +467,9 @@ fn m_other_tracking_modes_are_unsupported() {
         id: ExerciseId::from_uuid(Uuid::from_u128(2)),
         name: Name::new("Plank").unwrap(),
         mode: TrackingMode::Duration,
+        scheme: None,
     };
-    let mut current = SessionExercise::new(&plank);
+    let mut current = SessionExercise::new(entry_id(), &plank);
     current
         .push_set(LoggedSet {
             id: SetId::from_uuid(Uuid::from_u128(200)),

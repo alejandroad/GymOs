@@ -42,6 +42,15 @@ id_type! {
 }
 
 id_type! {
+    /**
+     * Identifies one exercise entry within a session. The same exercise may
+     * appear twice in a session, so commands name the entry, not the
+     * exercise (DD-15). It is also the stable key sync needs (DD-04).
+     */
+    SessionExerciseId
+}
+
+id_type! {
     /** Identifies one logged set. */
     SetId
 }
