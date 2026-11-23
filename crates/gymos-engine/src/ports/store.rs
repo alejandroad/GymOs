@@ -13,7 +13,7 @@
 
 use gymos_domain::{Exercise, ExerciseId, Session, SessionId, TemplateId, Timestamp};
 
-use crate::command::CommandId;
+use crate::command::{CommandId, CommandOutcome};
 use crate::error::{EngineError, RepoError};
 
 /**
@@ -123,14 +123,31 @@ pub trait ReadTx {
 /** Writes, inside a [`Store::write`] transaction. */
 pub trait WriteTx: ReadTx {
     /**
-     * Records that `command` is being applied. Returns `false` if it was
-     * already applied, in which case the engine changes nothing (DD-15).
+     * Starts applying `command`: returns the outcome it had if it was
+     * already applied in a committed write or earlier in this one, and
+     * `None` if it is new. On `Some`, the engine changes nothing and
+     * returns that outcome again (DD-15, S-7).
+     *
+     * # Errors
+     *
+     * [`RepoError`] if the store fails or the stored outcome is invalid.
+     */
+    fn begin_command(&mut self, command: CommandId) -> Result<Option<CommandOutcome>, RepoError>;
+
+    /**
+     * Records that `command` was applied with `outcome`. It is part of this
+     * transaction, so it is rolled back with everything else if the write
+     * fails.
      *
      * # Errors
      *
      * [`RepoError`] if the store fails.
      */
-    fn mark_applied(&mut self, command: CommandId) -> Result<bool, RepoError>;
+    fn finish_command(
+        &mut self,
+        command: CommandId,
+        outcome: CommandOutcome,
+    ) -> Result<(), RepoError>;
 
     /**
      * Inserts or replaces an exercise.

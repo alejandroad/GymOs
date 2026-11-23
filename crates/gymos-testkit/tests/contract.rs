@@ -42,6 +42,11 @@ fn a_command_is_applied_once() -> Result<(), EngineError> {
 }
 
 #[test]
+fn every_outcome_round_trips() -> Result<(), EngineError> {
+    scenarios::every_outcome_round_trips(&FakeStore::new())
+}
+
+#[test]
 fn saving_a_session_replaces_it() -> Result<(), EngineError> {
     scenarios::saving_a_session_replaces_it(&FakeStore::new())
 }

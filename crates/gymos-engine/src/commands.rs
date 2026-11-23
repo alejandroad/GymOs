@@ -2,10 +2,11 @@
  * Command handlers, one file per command.
  *
  * Each handler makes exactly one `store.write` call and does, in order:
- * mark the command applied, load, construct domain values, decide (pure
- * domain rules) and persist. Any error rolls the whole write back,
- * including the applied mark, so a failed command can be retried with the
- * same [`CommandId`].
+ * check whether the command was applied before, load, construct domain
+ * values, decide (pure domain rules), persist and record the command with
+ * its outcome. Any error rolls the whole write back, including the record
+ * of the command, so a failed command can be retried with the same
+ * [`CommandId`].
  */
 
 mod add_exercise;
@@ -43,8 +44,9 @@ pub(crate) fn execute<P: Ports>(
 }
 
 /**
- * The one write every command makes: marks `id` applied, then runs `apply`
- * in the same transaction. If `id` was applied before, `apply` never runs.
+ * The one write every command makes: runs `apply` and records `id` with
+ * its outcome, in the same transaction. If `id` was applied before,
+ * `apply` never runs and the stored outcome is returned (S-7).
  */
 fn write<P: Ports>(
     os: &GymOs<P>,
@@ -52,9 +54,11 @@ fn write<P: Ports>(
     apply: impl FnOnce(&mut <P::Store as Store>::Write<'_>) -> Result<CommandOutcome, EngineError>,
 ) -> Result<CommandOutcome, EngineError> {
     os.store.write(|tx| {
-        if !tx.mark_applied(id)? {
-            return Ok(CommandOutcome::AlreadyApplied);
+        if let Some(outcome) = tx.begin_command(id)? {
+            return Ok(outcome);
         }
-        apply(tx)
+        let outcome = apply(tx)?;
+        tx.finish_command(id, outcome)?;
+        Ok(outcome)
     })
 }

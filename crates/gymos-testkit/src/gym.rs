@@ -1,6 +1,10 @@
 /*!
- * A ready-made engine over the fakes, with one-line helpers for the
- * commands tests run most.
+ * A ready-made engine over the fake clock and IDs, with one-line helpers
+ * for the commands tests run most.
+ *
+ * The store is a type parameter (S-9): [`FakeStore`] by default, or any
+ * cloneable [`Store`], so the same stories ([`stories`](crate::stories))
+ * run against the real SQLite store too.
  *
  * The helpers fail loudly: they are for setting up a scenario, where any
  * error is a bug in the test. To check an error, call
@@ -13,14 +17,17 @@
     reason = "test setup helpers: an unexpected error or outcome is a failed test"
 )]
 
+use core::fmt;
+use core::marker::PhantomData;
 use gymos_domain::progression::ProgressionScheme;
 use gymos_domain::{
     ExerciseId, SessionExerciseId, SessionId, SetId, Source, TemplateId, Timestamp, TrackingMode,
     UtcOffset,
 };
+
 use gymos_engine::{
     AddExercise, Command, CommandId, CommandKind, CommandOutcome, CreateExercise, EngineError,
-    FinishSession, GymOs, IdGen, Ports, SetDeload, StartSession,
+    FinishSession, GymOs, IdGen, Ports, SetDeload, StartSession, Store,
 };
 
 use crate::builders::{SetBuilder, name};
@@ -28,12 +35,21 @@ use crate::fake_store::FakeStore;
 use crate::fixed_clock::SteppingClock;
 use crate::seq_ids::SeqIds;
 
-/** The fakes as one [`Ports`] bundle. */
-#[derive(Debug, Clone, Copy)]
-pub struct TestPorts;
+/**
+ * The test [`Ports`] bundle: store `S` (the fake by default), a
+ * [`SteppingClock`] and [`SeqIds`]. A type-level marker only; it is never
+ * constructed.
+ */
+pub struct TestPorts<S = FakeStore>(PhantomData<fn() -> S>);
 
-impl Ports for TestPorts {
-    type Store = FakeStore;
+impl<S> fmt::Debug for TestPorts<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("TestPorts")
+    }
+}
+
+impl<S: Store> Ports for TestPorts<S> {
+    type Store = S;
     type Clock = SteppingClock;
     type Ids = SeqIds;
 }
@@ -95,15 +111,22 @@ pub struct LoggedSession {
     pub entries: Vec<SessionExerciseId>,
 }
 
+/** 2026-01-05 07:00 UTC, when the clock starts. */
+const CLOCK_START: Timestamp = Timestamp::new(1_767_596_400_000, UtcOffset::UTC);
+
 /**
- * `GymOs` over a [`FakeStore`], a [`SteppingClock`] (one hour per read,
- * from [`TestGym::START`]) and [`SeqIds`]. Command IDs come from their own
- * generator, so they never collide with entity IDs.
+ * `GymOs` over store `S` (a [`FakeStore`] unless given another), a
+ * [`SteppingClock`] (one hour per read, from [`TestGym::START`]) and
+ * [`SeqIds`]. Command IDs come from their own generator, so they never
+ * collide with entity IDs.
+ *
+ * `S` must be [`Clone`] so the gym keeps a second handle on the same
+ * store, for snapshots and direct seeding.
  */
 #[derive(Debug)]
-pub struct TestGym {
-    os: GymOs<TestPorts>,
-    store: FakeStore,
+pub struct TestGym<S: Store + Clone = FakeStore> {
+    os: GymOs<TestPorts<S>>,
+    store: S,
     commands: SeqIds,
 }
 
@@ -115,14 +138,23 @@ impl Default for TestGym {
 
 impl TestGym {
     /** 2026-01-05 07:00 UTC, when the clock starts. */
-    pub const START: Timestamp = Timestamp::new(1_767_596_400_000, UtcOffset::UTC);
+    pub const START: Timestamp = CLOCK_START;
 
-    /** A fresh engine over an empty store. */
+    /** A fresh engine over an empty [`FakeStore`]. */
     pub fn new() -> Self {
-        let store = FakeStore::new();
+        Self::with_store(FakeStore::new())
+    }
+}
+
+impl<S: Store + Clone> TestGym<S> {
+    /**
+     * A fresh engine over `store`, which should be empty for the clock and
+     * ID sequences to make sense.
+     */
+    pub fn with_store(store: S) -> Self {
         let os = GymOs::new(
             store.clone(),
-            SteppingClock::new(Self::START, SteppingClock::HOUR),
+            SteppingClock::new(CLOCK_START, SteppingClock::HOUR),
             SeqIds::new(),
         );
         Self {
@@ -133,12 +165,12 @@ impl TestGym {
     }
 
     /** The engine. */
-    pub const fn os(&self) -> &GymOs<TestPorts> {
+    pub const fn os(&self) -> &GymOs<TestPorts<S>> {
         &self.os
     }
 
     /** A handle on the engine's store, for snapshots and direct seeding. */
-    pub const fn store(&self) -> &FakeStore {
+    pub const fn store(&self) -> &S {
         &self.store
     }
 

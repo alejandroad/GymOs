@@ -14,10 +14,12 @@
 use gymos_domain::progression::{ProgressionScheme, RepRange};
 use gymos_domain::{
     Distance, DurationSecs, Effort, Exercise, ExerciseId, ImportFormat, Note, Rir, Session,
-    SessionExercise, SessionExerciseId, SessionId, SetMetrics, SetType, Source, TemplateId,
+    SessionExercise, SessionExerciseId, SessionId, SetId, SetMetrics, SetType, Source, TemplateId,
     TrackingMode, Uuid,
 };
-use gymos_engine::{CommandId, EngineError, IdGen, Missing, ReadTx, SessionHeader, Store, WriteTx};
+use gymos_engine::{
+    CommandId, CommandOutcome, EngineError, IdGen, Missing, ReadTx, SessionHeader, Store, WriteTx,
+};
 
 use crate::builders::{SessionBuilder, SetBuilder, at, exercise, kg, lb, name, reps, rpe, working};
 use crate::seq_ids::SeqIds;
@@ -94,6 +96,7 @@ pub fn run_all<S: Store>(make: impl Fn() -> S) -> Result<(), EngineError> {
     a_failed_write_changes_nothing(&make())?;
     a_write_sees_its_own_changes(&make())?;
     a_command_is_applied_once(&make())?;
+    every_outcome_round_trips(&make())?;
     saving_a_session_replaces_it(&make())?;
     sessions_containing_lists_every_match(&make())?;
     Ok(())
@@ -261,7 +264,7 @@ fn rich_fixture() -> (Vec<Exercise>, Session) {
                 .effort(effort)
                 .note("set note");
             entry
-                .push_set(set.build(gymos_domain::SetId::from_uuid(ids.next_id())))
+                .push_set(set.build(SetId::from_uuid(ids.next_id())))
                 .expect("set matches its entry's mode");
         }
         session.add_exercise(entry).expect("unique entry ID");
@@ -343,11 +346,12 @@ pub fn a_failed_write_changes_nothing<S: Store>(store: &S) -> Result<(), EngineE
 
     let failure = EngineError::NotFound(Missing::Session(session_id(99)));
     let result: Result<(), EngineError> = store.write(|tx| {
-        assert!(tx.mark_applied(command(1))?);
+        assert_eq!(tx.begin_command(command(1))?, None);
         tx.save_exercise(&squat())?;
         let mut changed = before.clone();
         changed.set_deload(true);
         tx.save_session(&changed)?;
+        tx.finish_command(command(1), CommandOutcome::DeloadSet)?;
         Err(failure.clone())
     });
     assert_eq!(result, Err(failure));
@@ -358,9 +362,10 @@ pub fn a_failed_write_changes_nothing<S: Store>(store: &S) -> Result<(), EngineE
         Ok(())
     })?;
     store.write(|tx| {
-        assert!(
-            tx.mark_applied(command(1))?,
-            "the applied mark was rolled back"
+        assert_eq!(
+            tx.begin_command(command(1))?,
+            None,
+            "the command record was rolled back"
         );
         Ok(())
     })
@@ -393,8 +398,9 @@ pub fn a_write_sees_its_own_changes<S: Store>(store: &S) -> Result<(), EngineErr
 }
 
 /**
- * `mark_applied` returns `true` the first time for an ID and `false` ever
- * after, within one write and across writes.
+ * `begin_command` returns `None` for a command never finished, and the
+ * outcome it was finished with ever after, within one write and across
+ * writes (S-7).
  *
  * # Errors
  *
@@ -405,14 +411,51 @@ pub fn a_write_sees_its_own_changes<S: Store>(store: &S) -> Result<(), EngineErr
  * If the store breaks the promise.
  */
 pub fn a_command_is_applied_once<S: Store>(store: &S) -> Result<(), EngineError> {
+    let started = CommandOutcome::SessionStarted(session_id(1));
     store.write(|tx| {
-        assert!(tx.mark_applied(command(1))?);
-        assert!(!tx.mark_applied(command(1))?);
+        assert_eq!(tx.begin_command(command(1))?, None);
+        tx.finish_command(command(1), started)?;
+        assert_eq!(tx.begin_command(command(1))?, Some(started));
         Ok(())
     })?;
     store.write(|tx| {
-        assert!(!tx.mark_applied(command(1))?);
-        assert!(tx.mark_applied(command(2))?);
+        assert_eq!(tx.begin_command(command(1))?, Some(started));
+        assert_eq!(tx.begin_command(command(2))?, None);
+        Ok(())
+    })
+}
+
+/**
+ * Every kind of [`CommandOutcome`], with its ID, is returned exactly as it
+ * was recorded.
+ *
+ * # Errors
+ *
+ * Any store error.
+ *
+ * # Panics
+ *
+ * If the store breaks the promise.
+ */
+pub fn every_outcome_round_trips<S: Store>(store: &S) -> Result<(), EngineError> {
+    let outcomes = [
+        CommandOutcome::ExerciseCreated(bench().id),
+        CommandOutcome::SessionStarted(session_id(1)),
+        CommandOutcome::ExerciseAdded(entry_id(1)),
+        CommandOutcome::SetLogged(SetId::from_uuid(Uuid::from_u128(0x5E7))),
+        CommandOutcome::SessionFinished,
+        CommandOutcome::DeloadSet,
+    ];
+    store.write(|tx| {
+        for (n, outcome) in (1..).zip(outcomes) {
+            tx.finish_command(command(n), outcome)?;
+        }
+        Ok(())
+    })?;
+    store.write(|tx| {
+        for (n, outcome) in (1..).zip(outcomes) {
+            assert_eq!(tx.begin_command(command(n))?, Some(outcome));
+        }
         Ok(())
     })
 }

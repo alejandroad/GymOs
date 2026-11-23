@@ -1,6 +1,6 @@
 # GymOs: Design Decisions (Rust + Tauri)
 
-**Status:** Accepted · **Date:** 2026-11-03 · **Updated:** 2026-11-16 (DD-13 implemented; DD-15 added and implemented; DD-03 port shapes; open questions 2 and 4 resolved) · **Owner:** Alejandro
+**Status:** Accepted · **Date:** 2026-11-03 · **Updated:** 2026-11-19 (DD-04 implemented: the SQLite store; DD-15 replays return the original outcome) · 2026-11-16 (DD-13 implemented; DD-15 added and implemented; DD-03 port shapes; open questions 2 and 4 resolved) · **Owner:** Alejandro
 **Supersedes:** the stack, platform and workflow parts of `docs/HANDOFF.md` v1.5 (D6, D11, D15, D23, rules 13 and 15, the E0 tickets) and ADR 0001 (local Node server with `node:sqlite`).
 **Unchanged:** the product. The principles (§1.2), the core loop (§1.3) and the product spec (§3), now in [`docs/product.md`](product.md), still define what GymOs does. This document defines how it is built.
 
@@ -90,7 +90,7 @@
 **Port shapes** (amended 2026-11-16, engine-ports PR; from `docs/research/kernel-architecture.md` §5.1–5.3):
 - **One `Ports` bundle, generics over trait objects.** `trait Ports { type Store: Store; type Clock: Clock; type Ids: IdGen; }`, so the engine is `GymOs<P: Ports>` with one type parameter and static dispatch. Only the shell (and tests, through `gymos-testkit`'s `TestPorts`) names concrete types.
 - **The store is a closure-scoped unit of work.** `Store::write(|tx| …)` commits when the closure returns `Ok` and rolls back on `Err`; `Store::read(|tx| …)` gets a read-only view. The engine decides *what* belongs in one transaction, the store decides *how* it is atomic. Every command makes exactly one `write` call.
-- **Writes work on whole aggregates.** `WriteTx` saves a whole `Exercise` or `Session` and records applied `CommandId`s. There are no per-field setters, so business sequencing never leaks into an adapter. Choosing among stored rows ("last time", DD-15) is the engine's job; the store only lists candidates.
+- **Writes work on whole aggregates.** `WriteTx` saves a whole `Exercise` or `Session` and records each applied `CommandId` with its outcome (`begin_command` / `finish_command`, DD-15). There are no per-field setters, so business sequencing never leaks into an adapter. Choosing among stored rows ("last time", DD-15) is the engine's job; the store only lists candidates.
 - **Sync kernel, async shell.** Every port and engine method is synchronous and takes `&self`; interior mutability lives inside the store. The shell runs engine calls off the UI thread (`spawn_blocking`).
 - **Clock and IDs.** `Clock::now() -> Timestamp`; `IdGen::next_id() -> Uuid`, wrapped by the engine in the right ID type. The domain re-exports `Uuid`, so the engine needs no direct `uuid` dependency.
 
@@ -103,6 +103,19 @@
 - **Sync-ready from schema v1** (decided 2026-11-16; resolves open question 2): every table that will sync gets `hlc_updated`, per-field clocks, a `deleted` tombstone and `schema_version` in the first migration. Adding them to every table later would cost a migration of the whole database. Entities that sync need stable IDs, so session entries get a `SessionExerciseId` (DD-15).
 - **Location:** the OS app-data directory, resolved by the shell and passed into the store (not hard-coded in the core).
 - Carried over from the handoff: UUIDv7 IDs generated in the app, loads stored as entered value + entered unit + normalized kg, UTC plus original local offset, provenance columns, and derived data that is recomputable and never exported.
+
+**Implemented** (amended 2026-11-19, SQLite-store PR; decisions S-1 to S-11 in [`docs/prompts/PROMPT-3-sqlite-store.md`](prompts/PROMPT-3-sqlite-store.md) §4, all settled as recommended):
+- **Versions.** `rusqlite` 0.41.1 (`bundled` and `cache`, default features off) with `rusqlite_migration` 2.7.0. The prompt expected `rusqlite` 0.43, but the latest `rusqlite_migration` supports 0.41, so the pair is held there until it catches up.
+- **Connection (S-1).** `SqliteStore { Mutex<Connection> }`. `write` runs `BEGIN IMMEDIATE` and commits on `Ok`; `Err` or a panic rolls back (the transaction guard's drop). `read` opens a deferred transaction and always rolls it back. Every lock checks that SQLite is in autocommit mode, which proves no transaction is still open. If it isn't (a panic, or a `ROLLBACK` the guard's drop ignored), one more `ROLLBACK` is tried; if that fails, the lock is `RepoError::Backend`. A poisoned mutex is recovered only after that check passes. This reconciles S-1 ("don't trust a poisoned connection") with the requirement that the store stays usable after a panicking closure.
+- **Opening (S-6, S-8).** In order: read `user_version` of an existing file on a read-only connection that never checkpoints on close → refuse a newer (`OpenError::NewerSchema`) or negative (`UnknownSchema`) version, leaving the main file byte-for-byte untouched even if another process left frames in its WAL → open read-write with `busy_timeout` 5 s → `foreign_keys = ON` (checked) and `synchronous = FULL` → WAL for files (checked) → back up if a migration is pending → migrate.
+- **Backups (S-6).** `VACUUM INTO <db>.<label>.bak`, which is safe under WAL. The label comes from `StoreConfig` and is limited to ASCII letters, digits, `-`, `_` and `.` (not leading), so it can't name another directory. An existing target is `OpenError::BackupExists` and nothing is migrated. Backups are never pruned. A new, empty file has nothing to protect and gets no backup.
+- **Schema v1.** `STRICT` tables `exercises`, `sessions`, `session_entries`, `sets` and `applied_commands`. `CHECK`s pin down the shape of a row: enum codes, which columns each tracking mode uses, and which columns go together. Value ranges stay in the domain, which re-validates every row on read, so they can't drift between two places.
+- **Encodings (S-4).** As recommended: 16-byte UUID blobs; `*_utc_ms` + `*_offset_min`; loads as hundredths + unit + nanograms, with the nanograms re-derived on read; one `sets` table with a `mode` discriminant; effort scale + value; provenance kind + format + version; stable lowercase enum codes in `rows/codes.rs`.
+- **Sync columns (S-2).** Each synced table has `hlc_updated ''`, `field_clocks '{}'`, `deleted` and `schema_version`. `applied_commands` is a local idempotency log, so it has none.
+- **Saving a session (S-3).** One pass in one transaction. The session's entries and sets are first all tombstoned, then each one in the aggregate is upserted by ID with its `position` and revived. The committed result equals "upsert, then tombstone what's missing", with no ID list built in SQL. Every read filters `deleted = 0`. IDs are global, so the store refuses (`RepoError::Backend`, write rolled back) what it can't save without losing data: a set ID used twice in one session (the domain doesn't forbid it), or an entry or set ID that belongs to another session, even a tombstoned one. A set may move between entries of the same session.
+- **Corrupt rows (S-5).** Reads go back through the domain constructors, and text must already be in the form `Name::new` and `Note::new` produce. A rejected row is `RepoError::Corrupt` naming the table, the row and the field, never the value.
+- **Replays (S-7).** `applied_commands(id, outcome_kind, outcome_id)`. The prompt's sketch also had `kind` and `applied_utc_ms`. `kind` is implied by the outcome. `applied_utc_ms` would need a clock reading on every command, and the store reads no clock; add it with the sync outbox if it is needed.
+- **Tests.** The contract scenarios and the shared engine stories (S-9, `TestGym<S>`) run in memory and on a file. Round-trip properties run 256 cases each (S-11). `tests/fixtures/schema_v1.sqlite` (S-10) is generated by an ignored test and is frozen once v1 is released.
 
 ### DD-05 · UI: React + TypeScript + Vite
 - **One hard new thing at a time.** Rust takes the learning budget; the UI uses known tools.
@@ -319,7 +332,8 @@ The profile holds **no stats**:
 
 **Every write is a `Command`** (resolves open question 4).
 - One `Command` enum carries a `CommandId` generated by the **caller** (the UI, an importer or a test), so a retried call reuses the same ID.
-- Each command runs inside one `store.write` transaction. It first records its `CommandId`, and a command that was already applied returns `AlreadyApplied` without changing anything.
+- Each command runs inside one `store.write` transaction, which records its `CommandId` together with its `CommandOutcome`. A command that was already applied changes nothing and returns the outcome it had the first time, so a caller whose first response was lost can carry on (amended 2026-11-19, PROMPT-3 S-7; this replaced an `AlreadyApplied` outcome that carried no IDs).
+- Reusing a `CommandId` for a *different* command is not detected: it reads as a replay of the first. A payload hash would catch it; it is deferred (§5).
 - Importers and sync get one write path. The sync outbox table is deferred: adding it later is one extra call inside the same transaction.
 
 **"Last time" for verdicts** refines `product.md` §3.2 and DD-13 gap 2:
@@ -396,6 +410,7 @@ Small deviations are fine if the official Tauri scaffold prefers them.
 | Jaccard session matching and a user-picked baseline (DD-15) | When template-less baselines prove too coarse; needs a versioned threshold and golden tests |
 | Per-template scheme override and kind-based default rep ranges (DD-15) | With templates and an `ExerciseKind` |
 | Sync outbox table (DD-15) | With multi-device sync (M2) |
+| Detecting a reused `CommandId` with a different payload (DD-15) | When importers or sync first replay commands from outside the app |
 
 ## 6. Open questions (decide at scaffold or schema time)
 

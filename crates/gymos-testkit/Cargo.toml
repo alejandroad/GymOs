@@ -14,3 +14,6 @@ workspace = true
 [dependencies]
 gymos-domain.workspace = true
 gymos-engine.workspace = true
+# Strategies for property tests (S-11). Fine as a normal dependency: the
+# testkit itself is only ever a dev-dependency.
+proptest.workspace = true

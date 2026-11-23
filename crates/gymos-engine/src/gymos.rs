@@ -31,8 +31,8 @@ impl<P: Ports> GymOs<P> {
 
     /**
      * Applies one command in one transaction. Applying the same
-     * [`CommandId`](crate::CommandId) again returns
-     * [`CommandOutcome::AlreadyApplied`] and changes nothing.
+     * [`CommandId`](crate::CommandId) again changes nothing and returns the
+     * outcome of the first application.
      *
      * # Errors
      *

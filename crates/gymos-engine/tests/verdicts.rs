@@ -12,18 +12,18 @@
 )]
 
 use gymos_domain::progression::{
-    Direction, E1rm, ExerciseVerdict, ProgressionScheme, RepRange, Signal, Verdict, VerdictError,
+    Direction, ExerciseVerdict, ProgressionScheme, RepRange, Signal, Verdict, VerdictError,
 };
 use gymos_domain::{
-    ALGORITHM_VERSION, DurationSecs, ExerciseId, Load, SessionExerciseId, SessionId, SetMetrics,
-    Source, TemplateId, TrackingMode, Uuid,
+    DurationSecs, ExerciseId, Load, SessionExerciseId, SessionId, SetMetrics, Source, TemplateId,
+    TrackingMode, Uuid,
 };
 use gymos_engine::{
     BaselineRule, DomainError, EngineError, EntryOutcome, Missing, SessionVerdicts, StartSession,
     Store, WriteTx,
 };
 use gymos_testkit::{
-    SessionBuilder, SessionPlan, SetBuilder, TestGym, at, exercise, kg, reps, working,
+    SessionBuilder, SessionPlan, SetBuilder, TestGym, at, exercise, kg, reps, stories, working,
 };
 
 /* ---- helpers ------------------------------------------------------------ */
@@ -65,86 +65,13 @@ fn baseline_session(
         .map(|b| b.session)
 }
 
-fn e1rm(load: Load, n: u16) -> E1rm {
-    E1rm::of_set(load, reps(n), None).unwrap()
-}
-
-/** `kg_reps(2300)` is 2300 kg·reps in nanogram-reps. */
-const fn kg_reps(whole: i128) -> i128 {
-    whole * 1_000_000_000_000
-}
-
 /* ---- walking skeleton --------------------------------------------------- */
 
+/* Golden A, written from the spec table. The story is shared with the
+ * SQLite store's tests (S-9), so it lives in `gymos_testkit::stories`. */
 #[test]
 fn walking_skeleton_matches_golden_example_a() {
-    let gym = TestGym::new();
-    let bench = bench(&gym);
-    let k = kg(100, 0);
-    let (s1, s1_entry) = one(
-        &gym,
-        &SessionPlan::new().exercise(bench, sets(k, &[8, 8, 7])),
-    );
-    let (s2, s2_entry) = one(
-        &gym,
-        &SessionPlan::new().exercise(bench, sets(k, &[8, 9, 7])),
-    );
-
-    let verdicts = gym.os().session_verdicts(s2).unwrap();
-    assert_eq!(verdicts.session, s2);
-    let entry = &verdicts.entries[0];
-    assert_eq!((entry.entry, entry.exercise), (s2_entry, bench));
-    let baseline = entry.baseline.as_ref().unwrap();
-    assert_eq!(
-        (baseline.session, baseline.rule),
-        (s1, BaselineRule::SameExercise)
-    );
-    assert_eq!(baseline.entry.id(), s1_entry);
-
-    /* Golden A, written from the spec table: reps ↑ on set 2 (8→9),
-     * e1RM ↑ 126.67→130.00, volume ↑ 2300→2400 kg·reps. */
-    let v = only_verdict(&verdicts);
-    assert_eq!(v.verdict, Verdict::Progressed);
-    assert!(v.is_progressive_overload());
-    assert_eq!(
-        (v.skipped.as_slice(), v.algorithm_version),
-        (&[][..], ALGORITHM_VERSION)
-    );
-    assert_eq!(v.signals.len(), 3, "{:#?}", v.signals);
-    assert_eq!(
-        v.signals[0],
-        Signal::E1rm {
-            direction: Direction::Up,
-            before: e1rm(k, 8),
-            after: e1rm(k, 9),
-        }
-    );
-    assert!((e1rm(k, 8).kilograms() - 126.666_666).abs() < 1e-3);
-    assert!((e1rm(k, 9).kilograms() - 130.0).abs() < 1e-9);
-    assert_eq!(
-        v.signals[1],
-        Signal::RepsAtLoad {
-            direction: Direction::Up,
-            set_index: 1,
-            load: k,
-            before: reps(8),
-            after: reps(9),
-        }
-    );
-    let Signal::VolumeLoad {
-        direction,
-        before,
-        after,
-    } = v.signals[2]
-    else {
-        panic!("expected VolumeLoad, got {:?}", v.signals[2]);
-    };
-    assert_eq!(
-        (direction, before.nanogram_reps(), after.nanogram_reps()),
-        (Direction::Up, kg_reps(2300), kg_reps(2400))
-    );
-
-    assert_eq!((verdicts.tally.progressed, verdicts.tally.total()), (1, 1));
+    stories::walking_skeleton_matches_golden_example_a(&TestGym::new());
 }
 
 #[test]
