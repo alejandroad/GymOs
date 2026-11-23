@@ -99,7 +99,7 @@ fn finished_sessions_accept_more_sets() {
 /* ---- idempotency (D-5) -------------------------------------------------- */
 
 #[test]
-fn a_replayed_command_is_already_applied_and_changes_nothing() {
+fn a_replayed_command_returns_its_first_outcome_and_changes_nothing() {
     let gym = TestGym::new();
     let bench = gym.create_exercise("Bench Press", TrackingMode::WeightReps, None);
     let session = gym.start_session(None);
@@ -113,10 +113,9 @@ fn a_replayed_command_is_already_applied_and_changes_nothing() {
     assert!(matches!(first, CommandOutcome::SetLogged(_)));
     let after_first = gym.store().snapshot();
 
-    assert_eq!(
-        gym.os().execute(log).unwrap(),
-        CommandOutcome::AlreadyApplied
-    );
+    /* S-7: the retry gets the set's ID back, as if the first response had
+     * been lost. */
+    assert_eq!(gym.os().execute(log).unwrap(), first);
     assert_eq!(gym.store().snapshot(), after_first);
     assert_eq!(
         after_first.sessions()[&session]
@@ -180,11 +179,10 @@ fn every_command_kind_is_idempotent() {
     ];
     for command in commands {
         let outcome = gym.os().execute(command.clone()).unwrap();
-        assert_ne!(outcome, CommandOutcome::AlreadyApplied, "{command:?}");
         let before = gym.store().snapshot();
         assert_eq!(
             gym.os().execute(command.clone()).unwrap(),
-            CommandOutcome::AlreadyApplied,
+            outcome,
             "{command:?}"
         );
         assert_eq!(gym.store().snapshot(), before, "{command:?}");
@@ -201,7 +199,7 @@ fn a_failed_command_leaves_the_store_unchanged_and_can_be_retried() {
     let entry = gym.add_exercise(session, bench);
     let before = gym.store().snapshot();
 
-    /* mark_applied has already written when push_set refuses the set. */
+    /* begin_command has already run when push_set refuses the set. */
     let id = gym.command_id();
     let wrong_mode = LogSet {
         metrics: plank_set(),
@@ -218,7 +216,7 @@ fn a_failed_command_leaves_the_store_unchanged_and_can_be_retried() {
     );
     assert_eq!(gym.store().snapshot(), before);
 
-    /* The applied mark was rolled back too, so the same ID still works. */
+    /* The command record was rolled back too, so the same ID still works. */
     let fixed = working(kg(100, 0), 8).log_into(session, entry);
     let outcome = gym.os().execute(Command::new(id, fixed)).unwrap();
     assert!(matches!(outcome, CommandOutcome::SetLogged(_)));

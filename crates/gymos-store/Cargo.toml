@@ -10,3 +10,15 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+gymos-domain.workspace = true
+gymos-engine.workspace = true
+rusqlite.workspace = true
+rusqlite_migration.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+gymos-testkit.workspace = true
+proptest.workspace = true
+tempfile.workspace = true

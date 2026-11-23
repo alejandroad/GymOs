@@ -15,30 +15,17 @@
     reason = "test helpers build fixtures from known-valid literals; a panic is a failed test"
 )]
 
-use gymos_domain::progression::{
-    Direction, ExerciseVerdict, ProgressionScheme, RepRange, Signal, Verdict,
-};
-use gymos_domain::{
-    ALGORITHM_VERSION, Effort, ExerciseId, Load, Rir, SessionId, Source, TemplateId, Timestamp,
-    TrackingMode, Uuid,
-};
-use gymos_engine::{
-    BaselineRule, Command, CommandOutcome, EntryOutcome, FinishSession, StartSession,
-};
-use gymos_testkit::{SessionPlan, SetBuilder, TestGym, at, kg, lb, reps, rpe, working};
+use gymos_domain::progression::{Direction, ExerciseVerdict, Signal, Verdict};
+use gymos_domain::{ALGORITHM_VERSION, Effort, ExerciseId, Load, Rir, SessionId, TrackingMode};
+use gymos_engine::EntryOutcome;
+use gymos_testkit::{SessionPlan, SetBuilder, TestGym, kg, lb, reps, rpe, stories, working};
 
 use Verdict::{Deload, InsufficientData, Matched, Progressed, Regressed};
 
 /* ---- helpers ------------------------------------------------------------ */
 
-const DAY: i64 = 86_400_000;
-
 fn lift(gym: &TestGym, label: &str) -> ExerciseId {
     gym.create_exercise(label, TrackingMode::WeightReps, None)
-}
-
-fn template(n: u128) -> TemplateId {
-    TemplateId::from_uuid(Uuid::from_u128(0x7E << 64 | n))
 }
 
 fn sets(load: Load, reps: &[u16]) -> Vec<SetBuilder> {
@@ -53,39 +40,6 @@ fn rir(n: u8) -> Effort {
 fn log(gym: &TestGym, exercise: ExerciseId, sets: Vec<SetBuilder>) -> SessionId {
     gym.log_session(&SessionPlan::new().exercise(exercise, sets))
         .session
-}
-
-/** Logs a finished session at an explicit time, as an importer would. */
-fn log_at(
-    gym: &TestGym,
-    started_at: Timestamp,
-    exercise: ExerciseId,
-    sets: &[SetBuilder],
-) -> SessionId {
-    let outcome = gym
-        .run(StartSession {
-            started_at: Some(started_at),
-            template: None,
-            title: None,
-            source: Source::Manual,
-        })
-        .unwrap();
-    let CommandOutcome::SessionStarted(session) = outcome else {
-        panic!("expected SessionStarted, got {outcome:?}");
-    };
-    let entry = gym.add_exercise(session, exercise);
-    for set in sets {
-        gym.log_set(session, entry, set);
-    }
-    gym.run(FinishSession {
-        session,
-        ended_at: Some(Timestamp::new(
-            started_at.unix_millis() + 3_600_000,
-            started_at.offset(),
-        )),
-    })
-    .unwrap();
-    session
 }
 
 /** The verdict of a session's only entry. */
@@ -157,61 +111,10 @@ fn a_linear_progression_block_progresses_every_week() {
     )));
 }
 
+/* Shared with the SQLite store's tests (S-9): see `gymos_testkit::stories`. */
 #[test]
 fn a_double_progression_cycle_reads_as_progress_until_it_stalls() {
-    let gym = TestGym::new();
-    let scheme =
-        ProgressionScheme::new(RepRange::new(reps(6), reps(8)).unwrap(), kg(2, 50)).unwrap();
-    let bench = gym.create_exercise("Bench Press", TrackingMode::WeightReps, Some(scheme));
-    let cycle: Vec<SessionId> = [
-        (kg(100, 0), [6, 6, 6]),
-        (kg(100, 0), [7, 6, 6]),
-        (kg(100, 0), [8, 7, 7]),
-        (kg(100, 0), [8, 8, 8]),
-        /* Top of the range reached: add the increment, reps fall back. */
-        (kg(102, 50), [6, 6, 6]),
-        (kg(102, 50), [6, 6, 6]),
-        (kg(102, 50), [6, 6, 5]),
-    ]
-    .iter()
-    .map(|(load, r)| log(&gym, bench, sets(*load, r)))
-    .collect();
-
-    assert_eq!(
-        verdicts_of(&gym, &cycle),
-        [
-            InsufficientData,
-            Progressed,
-            Progressed,
-            Progressed,
-            Progressed,
-            Matched,
-            Regressed
-        ]
-    );
-    let load_step = verdict_of(&gym, cycle[4]);
-    assert_eq!(
-        load_step.signals.first(),
-        Some(&Signal::E1rm {
-            direction: Direction::Down,
-            before: gymos_domain::progression::E1rm::of_set(kg(100, 0), reps(8), None).unwrap(),
-            after: gymos_domain::progression::E1rm::of_set(kg(102, 50), reps(6), None).unwrap(),
-        }),
-        "the e1RM drop is still listed, so the explanation stays honest"
-    );
-    assert!(load_step.signals.contains(&Signal::LoadStep {
-        before: kg(100, 0),
-        after: kg(102, 50),
-        reps: reps(6),
-    }));
-    let stall = verdict_of(&gym, cycle[6]);
-    assert!(stall.signals.contains(&Signal::RepsAtLoad {
-        direction: Direction::Down,
-        set_index: 2,
-        load: kg(102, 50),
-        before: reps(6),
-        after: reps(5),
-    }));
+    stories::a_double_progression_cycle_reads_as_progress_until_it_stalls(&TestGym::new());
 }
 
 #[test]
@@ -419,39 +322,7 @@ fn several_exercises_in_one_session_are_judged_independently() {
 
 #[test]
 fn a_deload_week_is_skipped_and_the_block_resumes_from_before_it() {
-    let gym = TestGym::new();
-    let squat = lift(&gym, "Squat");
-    let w1 = log(&gym, squat, sets(kg(100, 0), &[5, 5, 5]));
-    let w2 = log(&gym, squat, sets(kg(102, 50), &[5, 5, 5]));
-    let w3 = log(&gym, squat, sets(kg(105, 0), &[5, 5, 5]));
-    let w4 = gym
-        .log_session(
-            &SessionPlan::new()
-                .deload()
-                .exercise(squat, sets(kg(80, 0), &[5, 5, 5])),
-        )
-        .session;
-    let w5 = log(&gym, squat, sets(kg(105, 0), &[5, 5, 5]));
-    let w6 = log(&gym, squat, sets(kg(107, 50), &[5, 5, 5]));
-
-    assert_eq!(
-        verdicts_of(&gym, &[w1, w2, w3, w4, w5, w6]),
-        [
-            InsufficientData,
-            Progressed,
-            Progressed,
-            Deload,
-            Matched,
-            Progressed
-        ]
-    );
-    assert_eq!(
-        baseline_of(&gym, w4),
-        Some(w3),
-        "a deload is still compared, for its signals"
-    );
-    assert_eq!(baseline_of(&gym, w5), Some(w3));
-    assert_eq!(baseline_of(&gym, w6), Some(w5));
+    stories::a_deload_week_is_skipped_and_the_block_resumes_from_before_it(&TestGym::new());
 }
 
 #[test]
@@ -508,83 +379,14 @@ fn marking_todays_session_as_a_deload_changes_its_verdict_only() {
 
 #[test]
 fn rotating_templates_each_progress_against_their_own_history() {
-    let gym = TestGym::new();
-    let bench = lift(&gym, "Bench Press");
-    let (heavy, volume) = (template(1), template(2));
-    let session = |template, load, r: &[u16]| {
-        gym.log_session(
-            &SessionPlan::new()
-                .template(template)
-                .exercise(bench, sets(load, r)),
-        )
-        .session
-    };
-    let a1 = session(heavy, kg(100, 0), &[5, 5, 5]);
-    let b1 = session(volume, kg(70, 0), &[10, 10, 10]);
-    let a2 = session(heavy, kg(102, 50), &[5, 5, 5]);
-    let b2 = session(volume, kg(70, 0), &[11, 10, 10]);
-    let a3 = session(heavy, kg(105, 0), &[5, 5, 5]);
-    let b3 = session(volume, kg(70, 0), &[12, 11, 10]);
-
-    /* B1 has no earlier volume day, so it falls back to the heavy day and
-     * reads as a regression (e1RM 93.33 vs 116.67 kg). From then on each
-     * template compares with itself. */
-    assert_eq!(
-        verdicts_of(&gym, &[a1, b1, a2, b2, a3, b3]),
-        [
-            InsufficientData,
-            Regressed,
-            Progressed,
-            Progressed,
-            Progressed,
-            Progressed
-        ]
-    );
-    let rule = |s| {
-        gym.os().session_verdicts(s).unwrap().entries[0]
-            .baseline
-            .as_ref()
-            .map(|b| (b.session, b.rule))
-    };
-    assert_eq!(rule(b1), Some((a1, BaselineRule::SameExercise)));
-    assert_eq!(rule(a2), Some((a1, BaselineRule::SameTemplate(heavy))));
-    assert_eq!(rule(b2), Some((b1, BaselineRule::SameTemplate(volume))));
-    assert_eq!(rule(b3), Some((b2, BaselineRule::SameTemplate(volume))));
+    stories::rotating_templates_each_progress_against_their_own_history(&TestGym::new());
 }
 
 /* ---- the past changes, and verdicts follow ------------------------------ */
 
 #[test]
 fn importing_an_older_session_moves_the_baseline_of_later_ones() {
-    let gym = TestGym::new();
-    let squat = lift(&gym, "Squat");
-    let jan_1 = log_at(&gym, at(1_767_225_600_000), squat, &sets(kg(100, 0), &[5]));
-    let jan_15 = log_at(
-        &gym,
-        at(1_767_225_600_000 + 14 * DAY),
-        squat,
-        &sets(kg(105, 0), &[5]),
-    );
-    assert_eq!(
-        (baseline_of(&gym, jan_15), verdict_of(&gym, jan_15).verdict),
-        (Some(jan_1), Progressed)
-    );
-
-    /* A forgotten workout from Jan 8 is imported afterwards. */
-    let jan_8 = log_at(
-        &gym,
-        at(1_767_225_600_000 + 7 * DAY),
-        squat,
-        &sets(kg(107, 50), &[5]),
-    );
-    assert_eq!(
-        (baseline_of(&gym, jan_8), verdict_of(&gym, jan_8).verdict),
-        (Some(jan_1), Progressed)
-    );
-    assert_eq!(
-        (baseline_of(&gym, jan_15), verdict_of(&gym, jan_15).verdict),
-        (Some(jan_8), Regressed)
-    );
+    stories::importing_an_older_session_moves_the_baseline_of_later_ones(&TestGym::new());
 }
 
 #[test]
@@ -626,27 +428,7 @@ fn finishing_an_older_session_later_makes_it_the_baseline() {
 
 #[test]
 fn a_replayed_command_never_changes_a_verdict() {
-    let gym = TestGym::new();
-    let squat = lift(&gym, "Squat");
-    log(&gym, squat, sets(kg(100, 0), &[5]));
-    let today = gym.log_session(&SessionPlan::new().exercise(squat, sets(kg(100, 0), &[5])));
-    let before = gym.os().session_verdicts(today.session).unwrap();
-
-    let extra = Command::new(
-        gym.command_id(),
-        working(kg(100, 0), 5).log_into(today.session, today.entries[0]),
-    );
-    gym.os().execute(extra.clone()).unwrap();
-    let after_first = gym.os().session_verdicts(today.session).unwrap();
-    assert_ne!(after_first, before, "the extra set is a new working set");
-    assert_eq!(
-        gym.os().execute(extra).unwrap(),
-        CommandOutcome::AlreadyApplied
-    );
-    assert_eq!(
-        gym.os().session_verdicts(today.session).unwrap(),
-        after_first
-    );
+    stories::a_replayed_command_never_changes_a_verdict(&TestGym::new());
 }
 
 #[test]

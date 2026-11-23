@@ -9,18 +9,20 @@
  * store.
  */
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use gymos_domain::{Exercise, ExerciseId, Session, SessionId};
-use gymos_engine::{CommandId, EngineError, ReadTx, RepoError, SessionHeader, Store, WriteTx};
+use gymos_engine::{
+    CommandId, CommandOutcome, EngineError, ReadTx, RepoError, SessionHeader, Store, WriteTx,
+};
 
 /** Everything a [`FakeStore`] holds. Compare two snapshots to prove nothing changed. */
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FakeState {
     exercises: BTreeMap<ExerciseId, Exercise>,
     sessions: BTreeMap<SessionId, Session>,
-    applied: BTreeSet<CommandId>,
+    applied: BTreeMap<CommandId, CommandOutcome>,
 }
 
 impl FakeState {
@@ -34,8 +36,8 @@ impl FakeState {
         &self.sessions
     }
 
-    /** Every command ID recorded as applied. */
-    pub const fn applied(&self) -> &BTreeSet<CommandId> {
+    /** Every command recorded as applied, with its outcome. */
+    pub const fn applied(&self) -> &BTreeMap<CommandId, CommandOutcome> {
         &self.applied
     }
 
@@ -153,8 +155,17 @@ impl ReadTx for FakeWrite {
 }
 
 impl WriteTx for FakeWrite {
-    fn mark_applied(&mut self, command: CommandId) -> Result<bool, RepoError> {
-        Ok(self.state.applied.insert(command))
+    fn begin_command(&mut self, command: CommandId) -> Result<Option<CommandOutcome>, RepoError> {
+        Ok(self.state.applied.get(&command).copied())
+    }
+
+    fn finish_command(
+        &mut self,
+        command: CommandId,
+        outcome: CommandOutcome,
+    ) -> Result<(), RepoError> {
+        self.state.applied.insert(command, outcome);
+        Ok(())
     }
 
     fn save_exercise(&mut self, exercise: &Exercise) -> Result<(), RepoError> {
